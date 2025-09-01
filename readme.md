@@ -74,14 +74,14 @@ A defensive data poisoning platform that helps individuals protect their privacy
 - [ ] Data propagation tracking
 - [ ] Effectiveness analytics dashboard
 
-## 🔒 Privacy & Legal Considerations
+## Privacy & Legal Considerations
 
 - **Scope Limitation**: Only targets commercial data brokers and voluntary submission sites
 - **Government Exclusion**: Explicitly avoids interaction with official government sources
 - **Personal Use**: Designed for individuals protecting their own data
 - **Compliance**: Respects terms of service and applicable laws
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Clone the repository
@@ -102,7 +102,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-## 📝 Development Workflow
+## Development Workflow
 
 1. **Feature Branch**: Create feature branches from `main`
 2. **Development**: Use Docker Compose for local development
@@ -110,6 +110,6 @@ uvicorn main:app --reload
 4. **Security**: Snyk scanning in CI pipeline
 5. **Deployment**: Automated deployment to AWS via GitHub Actions
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This tool is designed for legitimate privacy protection purposes. Users are responsible for ensuring their use complies with all applicable laws and terms of service.
