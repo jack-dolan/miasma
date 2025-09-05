@@ -1,0 +1,273 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # DATABASE SERVICES
+  # =============================================================================
+  
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-15-alpine}
+    container_name: miasma-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_SERVER: ${POSTGRES_SERVER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-miasma_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-secure-password}
+      POSTGRES_DB: ${POSTGRES_DB:-miasma_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - miasma-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-miasma_user} -d ${POSTGRES_DB:-miasma_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${DATABASE_MEMORY:-512m}
+          cpus: '${DATABASE_CPUS:-1.0}'
+
+  redis:
+    image: redis:${REDIS_VERSION:-7-alpine}
+    container_name: miasma-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-change-this-redis-password}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${CACHE_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - miasma-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY:-256m}
+          cpus: '${REDIS_CPUS:-0.5}'
+
+  # =============================================================================
+  # APPLICATION SERVICES
+  # =============================================================================
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: miasma-backend
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_NAME: ${APP_NAME:-Miasma}
+      DEBUG: ${DEBUG:-true}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Database
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-miasma_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-secure-password}
+      POSTGRES_DB: ${POSTGRES_DB:-miasma_db}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-miasma_user}:${POSTGRES_PASSWORD:-change-this-secure-password}@postgres:5432/${POSTGRES_DB:-miasma_db}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-change-this-redis-password}@redis:6379/0
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-jwt-key-minimum-32-characters-change-in-production}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      
+      # CORS
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000","http://localhost:5173","http://127.0.0.1:3000","http://127.0.0.1:5173"]'
+      
+      # Selenium
+      SELENIUM_HUB_URL: http://selenium:4444/wd/hub
+      
+      # Development
+      DEV_MODE: ${DEV_MODE:-true}
+      HOT_RELOAD: ${HOT_RELOAD:-true}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+      - ./data/scraped:/app/data/scraped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - miasma-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY:-1g}
+          cpus: '${BACKEND_CPUS:-1.0}'
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: miasma-frontend
+    restart: unless-stopped
+    environment:
+      # Vite development server
+      VITE_DEV_SERVER_HOST: 0.0.0.0
+      VITE_DEV_SERVER_PORT: 3000
+      
+      # API Configuration
+      VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8000}
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}/api/v1
+      VITE_WS_URL: ws://localhost:${BACKEND_PORT:-8000}/ws
+      
+      # Development
+      VITE_NODE_ENV: ${ENVIRONMENT:-development}
+      VITE_ENABLE_DEBUG_MODE: ${DEBUG:-true}
+      VITE_HOT_RELOAD: ${HOT_RELOAD:-true}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Anonymous volume for node_modules
+    depends_on:
+      - backend
+    networks:
+      - miasma-network
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          memory: ${FRONTEND_MEMORY:-512m}
+          cpus: '${FRONTEND_CPUS:-0.5}'
+
+  # =============================================================================
+  # WEB SCRAPING SERVICES
+  # =============================================================================
+
+  selenium:
+    image: seleniarm/standalone-chromium:${SELENIUM_VERSION:-4.15.0}
+    container_name: miasma-selenium
+    restart: unless-stopped
+    environment:
+      # Selenium Hub Configuration
+      SE_NODE_MAX_SESSIONS: ${SELENIUM_NODE_MAX_SESSIONS:-2}
+      SE_NODE_MAX_INSTANCES: ${SELENIUM_NODE_MAX_INSTANCES:-2}
+      SE_NODE_OVERRIDE_MAX_SESSIONS: true
+      
+      # Chrome Configuration
+      SE_CHROME_OPTS: "--headless --no-sandbox --disable-dev-shm-usage --disable-gpu --window-size=1920,1080"
+      
+      # VNC (for debugging - remove in production)
+      SE_VNC_NO_PASSWORD: 1
+      SE_START_XVFB: true
+    ports:
+      - "${SELENIUM_PORT:-4444}:4444"
+      - "7900:7900"  # VNC port for debugging
+    volumes:
+      - /dev/shm:/dev/shm
+      - ./data/screenshots:/home/seluser/screenshots
+      - ./data/downloads:/home/seluser/downloads
+    networks:
+      - miasma-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${SELENIUM_MEMORY:-2g}
+          cpus: '${SELENIUM_CPUS:-2.0}'
+
+  # =============================================================================
+  # DEVELOPMENT TOOLS
+  # =============================================================================
+
+  adminer:
+    image: adminer:latest
+    container_name: miasma-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - miasma-network
+    profiles:
+      - dev-tools
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: miasma-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD:-change-this-redis-password}
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - miasma-network
+    profiles:
+      - dev-tools
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DB_DATA_PATH:-./data/postgres}
+  
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${REDIS_DATA_PATH:-./data/redis}
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+
+networks:
+  miasma-network:
+    driver: bridge
+    name: miasma-network
