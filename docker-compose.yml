@@ -78,22 +78,22 @@ services:
       DEBUG: ${DEBUG:-true}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       
-      # Database
+      # Database - Use environment variables from .env file
       POSTGRES_SERVER: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-miasma_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-secure-password}
-      POSTGRES_DB: ${POSTGRES_DB:-miasma_db}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-miasma_user}:${POSTGRES_PASSWORD:-change-this-secure-password}@postgres:5432/${POSTGRES_DB:-miasma_db}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       
-      # Redis
+      # Redis - Use environment variables from .env file
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-change-this-redis-password}@redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       
       # Security
-      SECRET_KEY: ${SECRET_KEY:-your-super-secret-jwt-key-minimum-32-characters-change-in-production}
+      SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM:-HS256}
       
       # CORS
@@ -172,7 +172,7 @@ services:
   # =============================================================================
 
   selenium:
-    image: seleniarm/standalone-chromium:${SELENIUM_VERSION:-4.15.0}
+    image: selenium/standalone-chrome:${SELENIUM_VERSION:-4.15.0}
     container_name: miasma-selenium
     restart: unless-stopped
     environment:
