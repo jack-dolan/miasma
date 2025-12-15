@@ -3,6 +3,10 @@
 
 # Local data directories (postgres, redis, scraped data, etc.)
 /data/
+
+# Claude Code
+/.claude/
+CLAUDE.md
 .env.local
 .env.development.local
 .env.test.local
