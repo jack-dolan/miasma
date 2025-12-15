@@ -129,11 +129,12 @@ class Settings(BaseSettings):
     # DATA BROKER SITES CONFIGURATION
     # =============================================================================
     # Enable/Disable specific scrapers
-    ENABLE_WHITEPAGES: bool = True
-    ENABLE_SPOKEO: bool = True
-    ENABLE_TRUEPEOPLESEARCH: bool = True
-    ENABLE_BEENVERIFIED: bool = True
-    ENABLE_INTELIUS: bool = False
+    ENABLE_TRUEPEOPLESEARCH: bool = False  # CAPTCHA blocked
+    ENABLE_FASTPEOPLESEARCH: bool = False  # CAPTCHA blocked
+    ENABLE_NUWBER: bool = False  # Cloudflare blocked
+    ENABLE_CYBERBACKGROUNDCHECKS: bool = False  # Bot detection blocked
+    ENABLE_USPHONEBOOK: bool = False  # Cloudflare blocked
+    ENABLE_RADARIS: bool = True  # Working!
     
     # Scraper-specific settings
     WHITEPAGES_API_KEY: Optional[str] = None

@@ -7,6 +7,11 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from app.scrapers.truepeoplesearch import TruePeopleSearchScraper
+from app.scrapers.fastpeoplesearch import FastPeopleSearchScraper
+from app.scrapers.nuwber import NuwberScraper
+from app.scrapers.cyberbackgroundchecks import CyberBackgroundChecksScraper
+from app.scrapers.usphonebook import USPhoneBookScraper
+from app.scrapers.radaris import RadarisScraper
 from app.scrapers.base import ScraperResult
 from app.core.config import settings
 
@@ -19,8 +24,11 @@ class LookupService:
     # Registry of available scrapers
     SCRAPERS = {
         "truepeoplesearch": TruePeopleSearchScraper,
-        # "whitepages": WhitePagesScraper,  # Add later
-        # "spokeo": SpokeoScraper,  # Add later
+        "fastpeoplesearch": FastPeopleSearchScraper,
+        "nuwber": NuwberScraper,
+        "cyberbackgroundchecks": CyberBackgroundChecksScraper,
+        "usphonebook": USPhoneBookScraper,
+        "radaris": RadarisScraper,
     }
     
     @classmethod
@@ -141,14 +149,20 @@ class LookupService:
     def _get_enabled_sources(cls) -> List[str]:
         """Get list of enabled sources from config"""
         enabled = []
-        
+
         if settings.ENABLE_TRUEPEOPLESEARCH:
             enabled.append("truepeoplesearch")
-        if settings.ENABLE_WHITEPAGES:
-            enabled.append("whitepages")
-        if settings.ENABLE_SPOKEO:
-            enabled.append("spokeo")
-        
+        if settings.ENABLE_FASTPEOPLESEARCH:
+            enabled.append("fastpeoplesearch")
+        if settings.ENABLE_NUWBER:
+            enabled.append("nuwber")
+        if settings.ENABLE_CYBERBACKGROUNDCHECKS:
+            enabled.append("cyberbackgroundchecks")
+        if settings.ENABLE_USPHONEBOOK:
+            enabled.append("usphonebook")
+        if settings.ENABLE_RADARIS:
+            enabled.append("radaris")
+
         return [s for s in enabled if s in cls.SCRAPERS]
     
     @classmethod
@@ -168,8 +182,14 @@ class LookupService:
         """Check if a source is enabled in config"""
         if source_name == "truepeoplesearch":
             return settings.ENABLE_TRUEPEOPLESEARCH
-        elif source_name == "whitepages":
-            return settings.ENABLE_WHITEPAGES
-        elif source_name == "spokeo":
-            return settings.ENABLE_SPOKEO
+        elif source_name == "fastpeoplesearch":
+            return settings.ENABLE_FASTPEOPLESEARCH
+        elif source_name == "nuwber":
+            return settings.ENABLE_NUWBER
+        elif source_name == "cyberbackgroundchecks":
+            return settings.ENABLE_CYBERBACKGROUNDCHECKS
+        elif source_name == "usphonebook":
+            return settings.ENABLE_USPHONEBOOK
+        elif source_name == "radaris":
+            return settings.ENABLE_RADARIS
         return False

@@ -320,6 +320,10 @@ browser_cache/
 screenshots/
 downloads/
 
+# Scraper debug files
+*_debug.png
+*_page.html
+
 # =============================================================================
 # IDE AND EDITOR FILES
 # =============================================================================
