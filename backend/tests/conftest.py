@@ -29,7 +29,11 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 @pytest_asyncio.fixture
 async def test_engine():
-    """Create test database engine"""
+    """Create test database engine
+
+    Uses in-memory SQLite with NullPool, so no explicit cleanup needed.
+    The connection is automatically closed when the fixture ends.
+    """
     engine = create_async_engine(
         TEST_DATABASE_URL,
         poolclass=NullPool,
@@ -39,11 +43,8 @@ async def test_engine():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    try:
-        yield engine
-    finally:
-        # Cleanup - using sync dispose to avoid event loop issues
-        await engine.dispose()
+    yield engine
+    # No cleanup needed - in-memory SQLite with NullPool handles this
 
 
 @pytest_asyncio.fixture
