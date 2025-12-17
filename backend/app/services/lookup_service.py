@@ -6,6 +6,10 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from sqlalchemy import select, func, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.scrapers.truepeoplesearch import TruePeopleSearchScraper
 from app.scrapers.fastpeoplesearch import FastPeopleSearchScraper
 from app.scrapers.nuwber import NuwberScraper
@@ -14,6 +18,7 @@ from app.scrapers.usphonebook import USPhoneBookScraper
 from app.scrapers.radaris import RadarisScraper
 from app.scrapers.base import ScraperResult
 from app.core.config import settings
+from app.models.lookup_result import LookupResult, PersonRecord
 
 logger = logging.getLogger(__name__)
 
@@ -193,3 +198,196 @@ class LookupService:
         elif source_name == "radaris":
             return settings.ENABLE_RADARIS
         return False
+
+    # =========================================================================
+    # Database Operations
+    # =========================================================================
+
+    @classmethod
+    async def save_lookup_result(
+        cls,
+        db: AsyncSession,
+        search_results: Dict[str, Any],
+        user_id: Optional[int] = None
+    ) -> LookupResult:
+        """
+        Save lookup results to the database
+
+        Args:
+            db: Database session
+            search_results: Results from search_person()
+            user_id: Optional user ID who performed the search
+
+        Returns:
+            Created LookupResult object
+        """
+        query = search_results.get("query", {})
+
+        # Create the lookup result record
+        lookup_result = LookupResult(
+            user_id=user_id,
+            first_name=query.get("first_name", ""),
+            last_name=query.get("last_name", ""),
+            city=query.get("city"),
+            state=query.get("state"),
+            age=query.get("age"),
+            sources_searched=search_results.get("sources_searched", 0),
+            sources_successful=search_results.get("sources_successful", 0),
+            total_records_found=search_results.get("total_records_found", 0),
+            raw_results=search_results.get("results", [])
+        )
+
+        db.add(lookup_result)
+        await db.flush()  # Get the ID
+
+        # Create individual person records
+        for source_result in search_results.get("results", []):
+            if not source_result.get("success"):
+                continue
+
+            source_name = source_result.get("source", "unknown")
+            data = source_result.get("data", {})
+            records = data.get("results", [])
+
+            for record in records:
+                person_record = PersonRecord(
+                    lookup_result_id=lookup_result.id,
+                    source=source_name,
+                    name=record.get("name"),
+                    age=record.get("age"),
+                    location=record.get("location"),
+                    addresses=record.get("addresses", []),
+                    phone_numbers=record.get("phone_numbers", []),
+                    emails=record.get("emails", []),
+                    relatives=record.get("relatives", []),
+                    profile_url=record.get("profile_url"),
+                    raw_data=record
+                )
+                db.add(person_record)
+
+        await db.commit()
+        await db.refresh(lookup_result)
+
+        logger.info(f"Saved lookup result {lookup_result.id} with {lookup_result.total_records_found} records")
+        return lookup_result
+
+    @classmethod
+    async def get_lookup_result(
+        cls,
+        db: AsyncSession,
+        lookup_id: int,
+        user_id: Optional[int] = None
+    ) -> Optional[LookupResult]:
+        """
+        Get a lookup result by ID
+
+        Args:
+            db: Database session
+            lookup_id: ID of the lookup result
+            user_id: Optional user ID to filter by (for authorization)
+
+        Returns:
+            LookupResult or None if not found
+        """
+        query = select(LookupResult).options(
+            selectinload(LookupResult.person_records)
+        ).where(LookupResult.id == lookup_id)
+
+        if user_id is not None:
+            query = query.where(LookupResult.user_id == user_id)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_lookup_results(
+        cls,
+        db: AsyncSession,
+        user_id: Optional[int] = None,
+        page: int = 1,
+        page_size: int = 20,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get paginated list of lookup results
+
+        Args:
+            db: Database session
+            user_id: Optional user ID to filter by
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            first_name: Optional filter by first name
+            last_name: Optional filter by last name
+
+        Returns:
+            Dictionary with items, total, page info
+        """
+        # Build base query
+        query = select(LookupResult).options(
+            selectinload(LookupResult.person_records)
+        )
+        count_query = select(func.count(LookupResult.id))
+
+        # Apply filters
+        if user_id is not None:
+            query = query.where(LookupResult.user_id == user_id)
+            count_query = count_query.where(LookupResult.user_id == user_id)
+
+        if first_name:
+            query = query.where(LookupResult.first_name.ilike(f"%{first_name}%"))
+            count_query = count_query.where(LookupResult.first_name.ilike(f"%{first_name}%"))
+
+        if last_name:
+            query = query.where(LookupResult.last_name.ilike(f"%{last_name}%"))
+            count_query = count_query.where(LookupResult.last_name.ilike(f"%{last_name}%"))
+
+        # Get total count
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Apply pagination and ordering
+        offset = (page - 1) * page_size
+        query = query.order_by(desc(LookupResult.created_at)).offset(offset).limit(page_size)
+
+        # Execute query
+        result = await db.execute(query)
+        items = result.scalars().all()
+
+        # Calculate pages
+        pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages
+        }
+
+    @classmethod
+    async def delete_lookup_result(
+        cls,
+        db: AsyncSession,
+        lookup_id: int,
+        user_id: Optional[int] = None
+    ) -> bool:
+        """
+        Delete a lookup result
+
+        Args:
+            db: Database session
+            lookup_id: ID of the lookup result
+            user_id: Optional user ID for authorization
+
+        Returns:
+            True if deleted, False if not found
+        """
+        lookup_result = await cls.get_lookup_result(db, lookup_id, user_id)
+        if not lookup_result:
+            return False
+
+        await db.delete(lookup_result)
+        await db.commit()
+        logger.info(f"Deleted lookup result {lookup_id}")
+        return True
