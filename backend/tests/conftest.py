@@ -27,11 +27,12 @@ from app.core.config import settings
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def test_engine():
     """Create test database engine
 
     Uses in-memory SQLite with StaticPool to maintain a single connection.
+    Session-scoped to share across all tests.
     """
     engine = create_async_engine(
         TEST_DATABASE_URL,
@@ -45,19 +46,26 @@ async def test_engine():
 
     yield engine
 
+    await engine.dispose()
 
-@pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create test database session"""
-    async_session_factory = async_sessionmaker(
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def async_session_factory(test_engine):
+    """Create session factory - session scoped"""
+    return async_sessionmaker(
         test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
 
+
+@pytest_asyncio.fixture
+async def db_session(async_session_factory) -> AsyncGenerator[AsyncSession, None]:
+    """Create test database session - function scoped"""
     session = async_session_factory()
     try:
         yield session
+        await session.rollback()
     finally:
         await session.close()
 
