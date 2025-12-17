@@ -16,6 +16,9 @@ from sqlalchemy.pool import NullPool
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "false"
 
+# Import models first to ensure relationships are set up
+from app.models import user, campaign, lookup_result, data_source
+
 from app.main import app
 from app.core.database import Base, get_db_session
 from app.core.config import settings
