@@ -50,14 +50,17 @@ async def test_engine():
 @pytest_asyncio.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """Create test database session"""
-    async_session = async_sessionmaker(
+    async_session_factory = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
 
-    async with async_session() as session:
+    session = async_session_factory()
+    try:
         yield session
+    finally:
+        await session.close()
 
 
 @pytest_asyncio.fixture
@@ -70,10 +73,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db_session] = override_get_db
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    ac = AsyncClient(transport=transport, base_url="http://test")
+    try:
         yield ac
-
-    app.dependency_overrides.clear()
+    finally:
+        await ac.aclose()
+        app.dependency_overrides.clear()
 
 
 # Sample data fixtures
