@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import StaticPool
 
 # Set test environment before importing app
 os.environ["ENVIRONMENT"] = "test"
@@ -31,12 +31,12 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 async def test_engine():
     """Create test database engine
 
-    Uses in-memory SQLite with NullPool, so no explicit cleanup needed.
-    The connection is automatically closed when the fixture ends.
+    Uses in-memory SQLite with StaticPool to maintain a single connection.
     """
     engine = create_async_engine(
         TEST_DATABASE_URL,
-        poolclass=NullPool,
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
         echo=False,
     )
 
@@ -44,7 +44,6 @@ async def test_engine():
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
-    # No cleanup needed - in-memory SQLite with NullPool handles this
 
 
 @pytest_asyncio.fixture
