@@ -32,26 +32,31 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - startup and shutdown events"""
-    
+
     # Startup
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    
-    # Initialize database
-    await init_db()
-    logger.info("Database initialized")
-    
-    # Initialize Redis
-    await init_redis()
-    logger.info("Redis initialized")
-    
+
+    # Skip initialization in test environment
+    if settings.ENVIRONMENT != "test":
+        # Initialize database
+        await init_db()
+        logger.info("Database initialized")
+
+        # Initialize Redis
+        await init_redis()
+        logger.info("Redis initialized")
+    else:
+        logger.info("Skipping DB/Redis init in test environment")
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down application")
-    await close_redis()
-    logger.info("Redis connection closed")
+    if settings.ENVIRONMENT != "test":
+        await close_redis()
+        logger.info("Redis connection closed")
 
 # Create FastAPI application
 app = FastAPI(
