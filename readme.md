@@ -17,7 +17,7 @@ A defensive data poisoning platform that helps individuals protect their privacy
 - **React Query** - Server state management
 
 ### Backend
-- **Python 3.11** - Core language
+- **Python 3.13** - Core language
 - **FastAPI** - High-performance async web framework
 - **PostgreSQL** - Primary database for campaigns and results
 - **Redis** - Caching and session management

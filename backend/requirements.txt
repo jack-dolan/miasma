@@ -1,0 +1,53 @@
+# =============================================================================
+# MIASMA BACKEND DEPENDENCIES (Windows Python 3.13 Compatible)
+# =============================================================================
+
+# Core FastAPI and ASGI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Use newer Pydantic that has Python 3.13 wheels
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# Database - Install asyncpg for now since psycopg async isn't working
+asyncpg>=0.29.0
+sqlalchemy[asyncio]>=2.0.25
+alembic>=1.13.1
+
+# Redis
+redis>=5.0.1
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# HTTP Client & Web Scraping
+httpx>=0.26.0
+aiohttp>=3.9.1
+requests>=2.31.0
+selenium>=4.16.0
+beautifulsoup4>=4.12.2
+# Remove lxml for now - use html.parser instead
+
+# Data Processing - Minimal set
+# Remove pandas for now to avoid compilation issues
+faker>=21.0.0
+
+# Validation & Serialization
+email-validator>=2.1.0
+python-dateutil>=2.8.2
+
+# Development & Testing
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# Rate Limiting
+slowapi>=0.1.9
+
+# Logging
+structlog>=23.2.0

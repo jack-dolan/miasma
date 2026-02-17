@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     if (!password) {
       newErrors.password = 'Password is required'
-    } else if (password.length < 6) {
+    } else if (password.length < 4) {
       newErrors.password = 'Password must be at least 6 characters'
     }
 
