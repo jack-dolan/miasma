@@ -16,7 +16,17 @@ from app.scrapers.nuwber import NuwberScraper
 from app.scrapers.cyberbackgroundchecks import CyberBackgroundChecksScraper
 from app.scrapers.usphonebook import USPhoneBookScraper
 from app.scrapers.radaris import RadarisScraper
+from app.scrapers.thatsthem import ThatsThemScraper
+from app.scrapers.fastbackgroundcheck import FastBackgroundCheckScraper
+from app.scrapers.voterrecords import VoterRecordsScraper
 from app.scrapers.base import ScraperResult
+
+# Stealth scraper - optional, needs seleniumbase installed
+try:
+    from app.scrapers.cyberbackgroundchecks_stealth import CyberBackgroundChecksStealthScraper
+    _HAS_STEALTH = True
+except ImportError:
+    _HAS_STEALTH = False
 from app.core.config import settings
 from app.models.lookup_result import LookupResult, PersonRecord
 
@@ -61,7 +71,34 @@ SCRAPER_REGISTRY = {
         "config_key": "ENABLE_RADARIS",
         "block_reason": None,
     },
+    "thatsthem": {
+        "class": ThatsThemScraper,
+        "display_name": "ThatsThem",
+        "config_key": "ENABLE_THATSTHEM",
+        "block_reason": None,
+    },
+    "fastbackgroundcheck": {
+        "class": FastBackgroundCheckScraper,
+        "display_name": "FastBackgroundCheck",
+        "config_key": "ENABLE_FASTBACKGROUNDCHECK",
+        "block_reason": "Cloudflare protection",
+    },
+    "voterrecords": {
+        "class": VoterRecordsScraper,
+        "display_name": "VoterRecords",
+        "config_key": "ENABLE_VOTERRECORDS",
+        "block_reason": "Cloudflare protection",
+    },
 }
+
+# Add stealth scraper if available
+if _HAS_STEALTH:
+    SCRAPER_REGISTRY["cyberbackgroundchecks_stealth"] = {
+        "class": CyberBackgroundChecksStealthScraper,
+        "display_name": "CyberBackgroundChecks (Stealth)",
+        "config_key": "ENABLE_CYBERBACKGROUNDCHECKS_STEALTH",
+        "block_reason": None,
+    }
 
 
 class LookupService:

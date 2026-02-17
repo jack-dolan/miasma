@@ -66,21 +66,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database connection and create tables if needed"""
+    """Initialize database connection and verify it works.
+    Schema is managed by alembic migrations, not create_all."""
     try:
-        # Test database connection
         async with engine.begin() as conn:
             logger.info("Database connection successful")
-            
-            # In development, create tables if they don't exist
-            if settings.ENVIRONMENT == "development":
-                # Import all models to ensure they're registered
-                from app.models import user, campaign, data_source, lookup_result, submission, campaign_baseline
-                
-                # Create all tables
-                await conn.run_sync(Base.metadata.create_all)
-                logger.info("Database tables created/verified")
-                
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise

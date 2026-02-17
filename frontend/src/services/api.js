@@ -107,6 +107,11 @@ export const campaignApi = {
     const response = await api.post('/campaigns/', {
       name: data.name,
       description: data.description || null,
+      target_first_name: data.targetFirstName,
+      target_last_name: data.targetLastName,
+      target_city: data.targetCity || null,
+      target_state: data.targetState || null,
+      target_age: data.targetAge || null,
       target_sites: data.targetSites || null,
       target_count: data.targetCount || 10,
     })
@@ -120,6 +125,72 @@ export const campaignApi = {
 
   delete: async (id) => {
     const response = await api.delete(`/campaigns/${id}`)
+    return response.data
+  },
+
+  execute: async (id) => {
+    const response = await api.post(`/campaigns/${id}/execute`)
+    return response.data
+  },
+
+  pause: async (id) => {
+    const response = await api.post(`/campaigns/${id}/pause`)
+    return response.data
+  },
+
+  resume: async (id) => {
+    const response = await api.post(`/campaigns/${id}/resume`)
+    return response.data
+  },
+
+  getSubmissions: async (id, params = {}) => {
+    const response = await api.get(`/campaigns/${id}/submissions`, {
+      params: {
+        page: params.page || 1,
+        page_size: params.pageSize || 20,
+        status: params.status || null,
+      },
+    })
+    return response.data
+  },
+
+  takeBaseline: async (id) => {
+    const response = await api.post(`/campaigns/${id}/baseline`)
+    return response.data
+  },
+
+  takeCheck: async (id) => {
+    const response = await api.post(`/campaigns/${id}/check`)
+    return response.data
+  },
+
+  getBaselines: async (id) => {
+    const response = await api.get(`/campaigns/${id}/baselines`)
+    return response.data
+  },
+
+  getAccuracy: async (id) => {
+    const response = await api.get(`/campaigns/${id}/accuracy`)
+    return response.data
+  },
+
+  getBaselineDetail: async (campaignId, baselineId) => {
+    const response = await api.get(`/campaigns/${campaignId}/baselines/${baselineId}`)
+    return response.data
+  },
+}
+
+// Generate API
+export const generateApi = {
+  preview: async (data) => {
+    const response = await api.post('/generate/preview', {
+      count: data.count || 5,
+      template: data.template || null,
+      target_first_name: data.targetFirstName || null,
+      target_last_name: data.targetLastName || null,
+      target_state: data.targetState || null,
+      target_age: data.targetAge || null,
+    })
     return response.data
   },
 }

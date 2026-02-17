@@ -179,14 +179,14 @@ services:
       # Selenium Hub Configuration
       SE_NODE_MAX_SESSIONS: ${SELENIUM_NODE_MAX_SESSIONS:-2}
       SE_NODE_MAX_INSTANCES: ${SELENIUM_NODE_MAX_INSTANCES:-2}
-      SE_NODE_OVERRIDE_MAX_SESSIONS: true
+      SE_NODE_OVERRIDE_MAX_SESSIONS: "true"
       
       # Chrome Configuration
       SE_CHROME_OPTS: "--headless --no-sandbox --disable-dev-shm-usage --disable-gpu --window-size=1920,1080"
       
       # VNC (for debugging - remove in production)
       SE_VNC_NO_PASSWORD: 1
-      SE_START_XVFB: true
+      SE_START_XVFB: "true"
     ports:
       - "${SELENIUM_PORT:-4444}:4444"
       - "7900:7900"  # VNC port for debugging

@@ -113,7 +113,7 @@ export default function AnalyticsPage() {
                       <td className="py-2 text-gray-400">{lookup.sources_searched}</td>
                       <td className="py-2 text-gray-400">{lookup.records_found}</td>
                       <td className="py-2 text-gray-500">
-                        {lookup.created_at ? new Date(lookup.created_at).toLocaleDateString() : '—'}
+                        {lookup.created_at ? new Date(lookup.created_at).toLocaleDateString() : '-'}
                       </td>
                     </tr>
                   ))}

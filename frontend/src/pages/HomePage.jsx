@@ -50,7 +50,7 @@ export default function HomePage() {
           <div className="text-center mb-16">
             <h3 className="text-3xl font-bold mb-4">How Miasma Works</h3>
             <p className="text-gray-300 max-w-2xl mx-auto">
-              A comprehensive approach to data privacy through strategic information management
+              Protect your privacy by flooding data brokers with noise
             </p>
           </div>
           

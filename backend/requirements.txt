@@ -21,6 +21,7 @@ redis>=5.0.1
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt<5
 python-multipart==0.0.6
 
 # HTTP Client & Web Scraping
@@ -30,6 +31,8 @@ requests>=2.31.0
 selenium>=4.16.0
 beautifulsoup4>=4.12.2
 # Remove lxml for now - use html.parser instead
+# Optional: stealth scraping for cloudflare-protected sites
+# seleniumbase>=4.25.0
 
 # Data Processing - Minimal set
 # Remove pandas for now to avoid compilation issues

@@ -129,7 +129,7 @@ async def login(
 
 @router.post("/demo-login", response_model=TokenResponse)
 async def demo_login(db: AsyncSession = Depends(get_db)) -> Any:
-    """Demo login — creates or finds the demo account and returns a real token"""
+    """Demo login - creates or finds the demo account and returns a real token"""
 
     demo_email = "demo@miasma.dev"
 
