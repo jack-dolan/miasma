@@ -20,6 +20,7 @@ from app.models import user, campaign, lookup_result, data_source
 
 from app.main import app
 from app.core.database import Base, get_db_session
+from app.api.deps import get_db
 from app.core.config import settings
 
 
@@ -29,11 +30,7 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def test_engine():
-    """Create test database engine
-
-    Uses in-memory SQLite with StaticPool to maintain a single connection.
-    Session-scoped to share across all tests.
-    """
+    """Create test database engine"""
     engine = create_async_engine(
         TEST_DATABASE_URL,
         poolclass=StaticPool,
@@ -77,7 +74,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db():
         yield db_session
 
+    # Override both the raw session getter and the deps wrapper
     app.dependency_overrides[get_db_session] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
     transport = ASGITransport(app=app)
     ac = AsyncClient(transport=transport, base_url="http://test")
