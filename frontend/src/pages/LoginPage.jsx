@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState({})
 
-  const { login } = useAuth()
+  const { login, demoLogin } = useAuth()
   const navigate = useNavigate()
 
   const validateForm = () => {
@@ -25,7 +25,7 @@ export default function LoginPage() {
     if (!password) {
       newErrors.password = 'Password is required'
     } else if (password.length < 4) {
-      newErrors.password = 'Password must be at least 6 characters'
+      newErrors.password = 'Password must be at least 4 characters'
     }
 
     setErrors(newErrors)
@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     if (!validateForm()) {
       return
     }
@@ -47,6 +47,19 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (error) {
       setErrors({ submit: error.message || 'Login failed' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDemoLogin = async () => {
+    setIsLoading(true)
+    setErrors({})
+    try {
+      await demoLogin()
+      navigate('/dashboard')
+    } catch (error) {
+      setErrors({ submit: 'Demo login failed' })
     } finally {
       setIsLoading(false)
     }
@@ -69,11 +82,19 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Demo credentials info */}
+        {/* Demo login */}
         <div className="bg-blue-900/20 border border-blue-800 rounded-md p-4">
-          <h3 className="text-sm font-medium text-blue-400 mb-2">Demo Credentials</h3>
-          <p className="text-xs text-blue-300 mb-1">Email: demo@miasma.dev</p>
-          <p className="text-xs text-blue-300">Password: demo</p>
+          <h3 className="text-sm font-medium text-blue-400 mb-2">Quick Access</h3>
+          <p className="text-xs text-blue-300 mb-3">
+            Try the platform without creating an account.
+          </p>
+          <button
+            onClick={handleDemoLogin}
+            disabled={isLoading}
+            className="w-full bg-blue-600/30 hover:bg-blue-600/50 border border-blue-700 text-blue-200 px-4 py-2 rounded-md text-sm transition-colors disabled:opacity-50"
+          >
+            Launch Demo
+          </button>
         </div>
 
         {/* Login Form */}
@@ -146,7 +167,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Remember me and forgot password */}
+          {/* Remember me */}
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input
@@ -157,15 +178,6 @@ export default function LoginPage() {
               <label htmlFor="remember-me" className="ml-2 text-sm text-gray-300">
                 Remember me
               </label>
-            </div>
-
-            <div className="text-sm">
-              <Link 
-                to="/forgot-password" 
-                className="text-primary-400 hover:text-primary-300 transition-colors"
-              >
-                Forgot your password?
-              </Link>
             </div>
           </div>
 
@@ -184,8 +196,8 @@ export default function LoginPage() {
 
           {/* Back to home */}
           <div className="text-center">
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               className="text-sm text-gray-400 hover:text-gray-300 transition-colors"
             >
               ← Back to home

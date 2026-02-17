@@ -14,7 +14,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('miasma_access_token')
-    if (token && token !== 'demo-token') {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -30,6 +30,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('miasma_access_token')
+      localStorage.removeItem('miasma_refresh_token')
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -38,7 +39,6 @@ api.interceptors.response.use(
 
 // Lookup API
 export const lookupApi = {
-  // Search for a person
   search: async (params) => {
     const response = await api.post('/lookup/search', {
       first_name: params.firstName,
@@ -52,13 +52,11 @@ export const lookupApi = {
     return response.data
   },
 
-  // Get list of available sources
   getSources: async () => {
     const response = await api.get('/lookup/sources')
     return response.data
   },
 
-  // Get paginated list of lookup results
   getResults: async (params = {}) => {
     const response = await api.get('/lookup/results', {
       params: {
@@ -71,21 +69,65 @@ export const lookupApi = {
     return response.data
   },
 
-  // Get single lookup result by ID
   getResult: async (id) => {
     const response = await api.get(`/lookup/results/${id}`)
     return response.data
   },
 
-  // Get detailed lookup result (includes raw data)
   getResultDetail: async (id) => {
     const response = await api.get(`/lookup/results/${id}/detail`)
     return response.data
   },
 
-  // Delete a lookup result
   deleteResult: async (id) => {
     const response = await api.delete(`/lookup/results/${id}`)
+    return response.data
+  },
+}
+
+// Campaign API
+export const campaignApi = {
+  list: async (params = {}) => {
+    const response = await api.get('/campaigns/', {
+      params: {
+        page: params.page || 1,
+        page_size: params.pageSize || 20,
+        status: params.status || null,
+      },
+    })
+    return response.data
+  },
+
+  get: async (id) => {
+    const response = await api.get(`/campaigns/${id}`)
+    return response.data
+  },
+
+  create: async (data) => {
+    const response = await api.post('/campaigns/', {
+      name: data.name,
+      description: data.description || null,
+      target_sites: data.targetSites || null,
+      target_count: data.targetCount || 10,
+    })
+    return response.data
+  },
+
+  update: async (id, data) => {
+    const response = await api.patch(`/campaigns/${id}`, data)
+    return response.data
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/campaigns/${id}`)
+    return response.data
+  },
+}
+
+// Analytics API
+export const analyticsApi = {
+  getDashboard: async () => {
+    const response = await api.get('/analytics/dashboard')
     return response.data
   },
 }
