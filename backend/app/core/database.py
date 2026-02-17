@@ -75,7 +75,7 @@ async def init_db() -> None:
             # In development, create tables if they don't exist
             if settings.ENVIRONMENT == "development":
                 # Import all models to ensure they're registered
-                from app.models import user, campaign, data_source, lookup_result
+                from app.models import user, campaign, data_source, lookup_result, submission, campaign_baseline
                 
                 # Create all tables
                 await conn.run_sync(Base.metadata.create_all)

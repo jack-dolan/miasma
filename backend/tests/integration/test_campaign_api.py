@@ -50,6 +50,8 @@ class TestCampaignCreate:
             json={
                 "name": "Test Campaign",
                 "description": "Testing data injection",
+                "target_first_name": "Joe",
+                "target_last_name": "Smith",
                 "target_count": 5,
             },
         )
@@ -59,6 +61,34 @@ class TestCampaignCreate:
         assert data["name"] == "Test Campaign"
         assert data["status"] == "draft"
         assert data["target_count"] == 5
+        assert data["target_first_name"] == "Joe"
+        assert data["target_last_name"] == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_create_campaign_with_full_target(self, client: AsyncClient):
+        """Should store all target identity fields"""
+        token = await get_auth_token(client)
+        response = await client.post(
+            "/api/v1/campaigns/",
+            headers=auth_headers(token),
+            json={
+                "name": "Full Target Campaign",
+                "target_first_name": "Jane",
+                "target_last_name": "Doe",
+                "target_city": "Denver",
+                "target_state": "CO",
+                "target_age": 35,
+                "target_count": 10,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["target_first_name"] == "Jane"
+        assert data["target_last_name"] == "Doe"
+        assert data["target_city"] == "Denver"
+        assert data["target_state"] == "CO"
+        assert data["target_age"] == 35
 
     @pytest.mark.asyncio
     async def test_create_requires_name(self, client: AsyncClient):
@@ -67,7 +97,23 @@ class TestCampaignCreate:
         response = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"description": "no name"},
+            json={
+                "description": "no name",
+                "target_first_name": "Joe",
+                "target_last_name": "Smith",
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_requires_target_name(self, client: AsyncClient):
+        """Should require target first and last name"""
+        token = await get_auth_token(client)
+        response = await client.post(
+            "/api/v1/campaigns/",
+            headers=auth_headers(token),
+            json={"name": "Missing Target"},
         )
 
         assert response.status_code == 422
@@ -85,7 +131,7 @@ class TestCampaignCRUD:
         create_resp = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"name": "Get Test"},
+            json={"name": "Get Test", "target_first_name": "A", "target_last_name": "B"},
         )
         campaign_id = create_resp.json()["id"]
 
@@ -106,7 +152,7 @@ class TestCampaignCRUD:
         create_resp = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"name": "Original Name"},
+            json={"name": "Original Name", "target_first_name": "A", "target_last_name": "B"},
         )
         campaign_id = create_resp.json()["id"]
 
@@ -127,7 +173,7 @@ class TestCampaignCRUD:
         create_resp = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"name": "Delete Me"},
+            json={"name": "Delete Me", "target_first_name": "A", "target_last_name": "B"},
         )
         campaign_id = create_resp.json()["id"]
 
@@ -153,7 +199,7 @@ class TestCampaignCRUD:
         create_resp = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"name": "Status Test"},
+            json={"name": "Status Test", "target_first_name": "A", "target_last_name": "B"},
         )
         campaign_id = create_resp.json()["id"]
 
@@ -174,7 +220,7 @@ class TestCampaignCRUD:
         create_resp = await client.post(
             "/api/v1/campaigns/",
             headers=auth_headers(token),
-            json={"name": "Invalid Transition"},
+            json={"name": "Invalid Transition", "target_first_name": "A", "target_last_name": "B"},
         )
         campaign_id = create_resp.json()["id"]
 

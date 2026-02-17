@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     SELENIUM_TIMEOUT: int = 30
     PAGE_LOAD_TIMEOUT: int = 30
     
+    # Use SeleniumBase UC Mode instead of Selenium Hub (needs Chrome + xvfb installed locally)
+    USE_STEALTH_DRIVER: bool = True
+
     # Scraping Behavior
     REQUEST_DELAY_MIN: int = 1
     REQUEST_DELAY_MAX: int = 3
@@ -134,8 +137,12 @@ class Settings(BaseSettings):
     ENABLE_NUWBER: bool = False  # Cloudflare blocked
     ENABLE_CYBERBACKGROUNDCHECKS: bool = False  # Bot detection blocked
     ENABLE_USPHONEBOOK: bool = False  # Cloudflare blocked
-    ENABLE_RADARIS: bool = True  # Working!
-    
+    ENABLE_RADARIS: bool = True  # Working with UC mode
+    ENABLE_THATSTHEM: bool = True  # Works with UC mode, occasional captcha
+    ENABLE_FASTBACKGROUNDCHECK: bool = False  # Cloudflare blocks even UC mode
+    ENABLE_VOTERRECORDS: bool = False  # Cloudflare blocks even UC mode
+    ENABLE_CYBERBACKGROUNDCHECKS_STEALTH: bool = False  # UC mode variant - needs testing
+
     # Scraper-specific settings
     WHITEPAGES_API_KEY: Optional[str] = None
     SPOKEO_API_KEY: Optional[str] = None

@@ -34,6 +34,11 @@ class CampaignService:
         user_id: int,
         name: str,
         description: Optional[str] = None,
+        target_first_name: Optional[str] = None,
+        target_last_name: Optional[str] = None,
+        target_city: Optional[str] = None,
+        target_state: Optional[str] = None,
+        target_age: Optional[int] = None,
         target_sites: Optional[List[str]] = None,
         target_count: int = 10,
     ) -> Campaign:
@@ -51,6 +56,11 @@ class CampaignService:
             user_id=user_id,
             name=name,
             description=description,
+            target_first_name=target_first_name,
+            target_last_name=target_last_name,
+            target_city=target_city,
+            target_state=target_state,
+            target_age=target_age,
             target_sites=target_sites,
             target_count=min(target_count, settings.MAX_SUBMISSIONS_PER_CAMPAIGN),
             status=CampaignStatus.DRAFT,
@@ -144,7 +154,12 @@ class CampaignService:
             campaign.status = new_status
 
         # Update other fields
-        for field in ("name", "description", "target_sites", "target_count"):
+        updatable = (
+            "name", "description", "target_sites", "target_count",
+            "target_first_name", "target_last_name", "target_city",
+            "target_state", "target_age",
+        )
+        for field in updatable:
             if field in updates and updates[field] is not None:
                 setattr(campaign, field, updates[field])
 

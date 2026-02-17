@@ -12,6 +12,11 @@ class CampaignCreate(BaseModel):
     """Schema for creating a campaign"""
     name: str
     description: Optional[str] = None
+    target_first_name: str
+    target_last_name: str
+    target_city: Optional[str] = None
+    target_state: Optional[str] = None
+    target_age: Optional[int] = None
     target_sites: Optional[List[str]] = None
     target_count: int = 10
 
@@ -20,6 +25,11 @@ class CampaignUpdate(BaseModel):
     """Schema for updating a campaign"""
     name: Optional[str] = None
     description: Optional[str] = None
+    target_first_name: Optional[str] = None
+    target_last_name: Optional[str] = None
+    target_city: Optional[str] = None
+    target_state: Optional[str] = None
+    target_age: Optional[int] = None
     target_sites: Optional[List[str]] = None
     target_count: Optional[int] = None
     status: Optional[str] = None
@@ -32,6 +42,11 @@ class CampaignResponse(BaseModel):
     name: str
     description: Optional[str] = None
     status: str
+    target_first_name: Optional[str] = None
+    target_last_name: Optional[str] = None
+    target_city: Optional[str] = None
+    target_state: Optional[str] = None
+    target_age: Optional[int] = None
     target_sites: Optional[List[str]] = None
     target_count: int
     submissions_completed: int

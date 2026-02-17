@@ -16,7 +16,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "false"
 
 # Import models first to ensure relationships are set up
-from app.models import user, campaign, lookup_result, data_source
+from app.models import user, campaign, lookup_result, data_source, submission, campaign_baseline
 
 from app.main import app
 from app.core.database import Base, get_db_session

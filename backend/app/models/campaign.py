@@ -50,6 +50,13 @@ class Campaign(Base):
         nullable=False
     )
 
+    # Target identity (the real person whose records we're poisoning)
+    target_first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_state: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    target_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Target configuration
     target_sites: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     target_count: Mapped[int] = mapped_column(Integer, default=10)
@@ -76,10 +83,20 @@ class Campaign(Base):
         nullable=False
     )
 
-    # Relationship to user
+    # Relationships
     user: Mapped["User"] = relationship(
         "User",
         back_populates="campaigns"
+    )
+    submissions: Mapped[List["Submission"]] = relationship(
+        "Submission",
+        back_populates="campaign",
+        cascade="all, delete-orphan"
+    )
+    baselines: Mapped[List["CampaignBaseline"]] = relationship(
+        "CampaignBaseline",
+        back_populates="campaign",
+        cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

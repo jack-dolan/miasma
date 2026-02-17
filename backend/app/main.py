@@ -17,7 +17,7 @@ from slowapi.util import get_remote_address
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.redis import init_redis, close_redis
-from app.api.routes import auth, users, lookup, campaigns, analytics
+from app.api.routes import auth, users, lookup, campaigns, analytics, generator
 
 # Configure logging
 logging.basicConfig(
@@ -157,8 +157,14 @@ app.include_router(
 
 app.include_router(
     analytics.router,
-    prefix=f"{settings.API_V1_STR}/analytics", 
+    prefix=f"{settings.API_V1_STR}/analytics",
     tags=["analytics"]
+)
+
+app.include_router(
+    generator.router,
+    prefix=f"{settings.API_V1_STR}/generate",
+    tags=["generation"]
 )
 
 # Development middleware for request logging
