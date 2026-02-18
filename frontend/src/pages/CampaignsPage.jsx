@@ -241,14 +241,16 @@ function CreateModal({ onClose, onCreated }) {
 }
 
 function ProgressBar({ completed, failed, total }) {
+  const processed = completed + failed
   const pctDone = total > 0 ? Math.round((completed / total) * 100) : 0
   const pctFailed = total > 0 ? Math.round((failed / total) * 100) : 0
+  const pctProcessed = total > 0 ? Math.round((processed / total) * 100) : 0
 
   return (
     <div className="w-full">
       <div className="flex justify-between text-xs text-gray-400 mb-1">
-        <span>{completed} / {total} completed</span>
-        <span>{pctDone}%</span>
+        <span>{processed} / {total} processed</span>
+        <span>{pctProcessed}%</span>
       </div>
       <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
         <div className="h-full flex">
@@ -470,7 +472,7 @@ function AccuracyPanel({ campaignId, status }) {
     setActing(true)
     try {
       await campaignApi.takeBaseline(campaignId)
-      toast.success('Baseline snapshot started')
+      toast.success('Baseline snapshot complete')
       await loadData()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to take baseline')
@@ -998,7 +1000,7 @@ function CampaignCard({ campaign, onRefresh }) {
               <ProgressBar
                 completed={live.submissions_completed || 0}
                 failed={live.submissions_failed || 0}
-                total={live.target_count || 1}
+                total={(live.target_count || 1) * (live.target_sites?.length || 1)}
               />
             </div>
           </div>

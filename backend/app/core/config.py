@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     # Campaign Settings
     MAX_CAMPAIGNS_PER_USER: int = 10
     MAX_SUBMISSIONS_PER_CAMPAIGN: int = 100
-    CAMPAIGN_EXECUTION_DELAY_HOURS: int = 24
+    CAMPAIGN_EXECUTION_DELAY_HOURS: float = 0.05  # ~3 min total spread; override in production
     
     # =============================================================================
     # LOGGING CONFIGURATION

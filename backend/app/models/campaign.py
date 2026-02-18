@@ -45,7 +45,7 @@ class Campaign(Base):
 
     # Status
     status: Mapped[CampaignStatus] = mapped_column(
-        Enum(CampaignStatus),
+        Enum(CampaignStatus, values_callable=lambda e: [x.value for x in e]),
         default=CampaignStatus.DRAFT,
         nullable=False
     )

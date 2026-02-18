@@ -42,7 +42,7 @@ class Submission(Base):
 
     # Status
     status: Mapped[SubmissionStatus] = mapped_column(
-        Enum(SubmissionStatus),
+        Enum(SubmissionStatus, values_callable=lambda e: [x.value for x in e]),
         default=SubmissionStatus.PENDING,
         nullable=False
     )

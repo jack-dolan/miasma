@@ -264,7 +264,10 @@ class CampaignExecutor:
                 return
 
             try:
-                result = await submitter.execute(sub.profile_data)
+                result = await asyncio.wait_for(
+                    submitter.execute(sub.profile_data),
+                    timeout=120,
+                )
 
                 if result.success:
                     sub.status = SubmissionStatus.SUBMITTED
@@ -283,6 +286,18 @@ class CampaignExecutor:
                         campaign.submissions_failed = (campaign.submissions_failed or 0) + 1
 
                 await db.commit()
+
+            except asyncio.TimeoutError:
+                await db.rollback()
+                sub.status = SubmissionStatus.FAILED
+                sub.error_message = "Submission timed out after 120s"
+
+                campaign = await db.get(Campaign, sub.campaign_id)
+                if campaign:
+                    campaign.submissions_failed = (campaign.submissions_failed or 0) + 1
+
+                await db.commit()
+                logger.warning(f"Submission {submission_id} timed out")
 
             except Exception as e:
                 await db.rollback()
