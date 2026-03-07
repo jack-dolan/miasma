@@ -1,41 +1,338 @@
 """
-FastPeopleSearch scraper implementation
+FastPeopleSearch scraper — Camoufox + JSON-LD extraction.
+
+Uses Camoufox (antidetect Firefox via Playwright) to bypass Cloudflare Turnstile
+and DataDome, then extracts structured person data from JSON-LD blocks embedded
+in the page source. No DOM parsing needed.
+
+Browser session is reusable: call open() once, then search() multiple times,
+then close(). Or use scrape() for one-shot lookups that manage the session
+automatically.
+
+Requires: camoufox, xvfb (Linux)
 """
 
+import asyncio
+import html
+import json
 import logging
+import random
 import re
 from typing import Dict, List, Optional, Any
 
-from selenium.webdriver.common.by import By
-
-from app.scrapers.base import BaseScraper, ScraperResult
+from app.scrapers.result import ScraperResult
 
 logger = logging.getLogger(__name__)
 
 
-class FastPeopleSearchScraper(BaseScraper):
-    """Scraper for FastPeopleSearch.com"""
+class FastPeopleSearchScraper:
+    """
+    Scraper for FastPeopleSearch.com using Camoufox.
+
+    Doesn't inherit from BaseScraper because it uses Playwright (via Camoufox)
+    instead of Selenium. Outputs ScraperResult for compatibility with the rest
+    of the pipeline.
+
+    Usage (batch):
+        scraper = FastPeopleSearchScraper()
+        await scraper.open()
+        result1 = await scraper.search("John", "Smith", city="Boston", state="MA")
+        result2 = await scraper.search("Jane", "Doe", state="NY")
+        await scraper.close()
+
+    Usage (one-shot):
+        scraper = FastPeopleSearchScraper()
+        result = await scraper.scrape("John", "Smith", city="Boston", state="MA")
+    """
 
     BASE_URL = "https://www.fastpeoplesearch.com"
+    CHALLENGE_TIMEOUT = 20  # seconds to wait for Turnstile
+    PAGE_LOAD_TIMEOUT = 30000  # ms
+    MAX_RETRIES = 2  # retries per search if Turnstile/load fails
+    REQUEST_DELAY_MIN = 3.0  # min seconds between requests (batch mode)
+    REQUEST_DELAY_MAX = 7.0  # max seconds between requests (batch mode)
+
+    def __init__(self):
+        self.source_name = "FastPeopleSearch"
+        self._browser = None
+        self._context_manager = None
+        self._page = None
+        self._request_count = 0
+
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
+
+    async def open(self):
+        """
+        Launch browser and create a reusable page.
+
+        Call this once before doing multiple search() calls. The browser
+        stays open until close() is called, so Turnstile only needs to be
+        solved on the first request (cookies persist across navigations).
+        """
+        if self._browser:
+            return  # already open
+
+        from camoufox.async_api import AsyncCamoufox
+
+        self._context_manager = AsyncCamoufox(
+            headless="virtual",
+            humanize=True,
+        )
+        self._browser = await self._context_manager.__aenter__()
+        self._page = await self._browser.new_page()
+        self._request_count = 0
+        logger.info("FastPeopleSearch: browser session opened")
+
+    async def close(self):
+        """Close the browser session."""
+        if self._context_manager:
+            try:
+                await self._context_manager.__aexit__(None, None, None)
+            except Exception as e:
+                logger.warning(f"Error closing browser: {e}")
+            finally:
+                self._browser = None
+                self._context_manager = None
+                self._page = None
+        logger.info("FastPeopleSearch: browser session closed")
+
+    # ------------------------------------------------------------------
+    # URL building
+    # ------------------------------------------------------------------
 
     def _build_search_url(
         self,
         first_name: str,
         last_name: str,
         city: Optional[str] = None,
-        state: Optional[str] = None
+        state: Optional[str] = None,
     ) -> str:
-        """Build the search URL based on available parameters"""
-        # FastPeopleSearch uses hyphenated names in URL
+        """Build search URL. Format: /name/first-last_city-state"""
         name_slug = f"{first_name}-{last_name}".lower().replace(" ", "-")
 
         if city and state:
-            # Format: /name/city-state
             location_slug = f"{city}-{state}".lower().replace(" ", "-")
             return f"{self.BASE_URL}/name/{name_slug}_{location_slug}"
+        elif state:
+            location_slug = state.lower().replace(" ", "-")
+            return f"{self.BASE_URL}/name/{name_slug}_{location_slug}"
         else:
-            # Format: /name
             return f"{self.BASE_URL}/name/{name_slug}"
+
+    # ------------------------------------------------------------------
+    # Cloudflare Turnstile
+    # ------------------------------------------------------------------
+
+    async def _solve_turnstile(self, page) -> bool:
+        """
+        Attempt to solve Cloudflare Turnstile challenge.
+
+        Turnstile renders in an iframe from challenges.cloudflare.com.
+        Clicking the iframe body is usually enough with Camoufox since
+        it passes the browser fingerprint checks.
+
+        Returns True if challenge was solved or wasn't present.
+        """
+        title = await page.title()
+
+        if "just a moment" not in title.lower() and "security challenge" not in title.lower():
+            return True  # no challenge
+
+        logger.info("Cloudflare Turnstile detected, solving...")
+
+        # Wait for the Turnstile iframe to load
+        await page.wait_for_timeout(3000)
+
+        # Find and click the Turnstile frame
+        clicked = False
+        for frame in page.frames:
+            if "challenges.cloudflare.com" in frame.url:
+                try:
+                    await frame.click("body")
+                    clicked = True
+                    logger.info("Clicked Turnstile frame")
+                except Exception as e:
+                    logger.warning(f"Failed to click Turnstile frame: {e}")
+                break
+
+        if not clicked:
+            logger.warning("No Turnstile frame found, waiting anyway...")
+
+        # Poll for resolution
+        checks = self.CHALLENGE_TIMEOUT // 2
+        for i in range(checks):
+            await page.wait_for_timeout(2000)
+            title = await page.title()
+            if "just a moment" not in title.lower() and "security challenge" not in title.lower():
+                logger.info(f"Turnstile solved in {(i+1)*2}s")
+                return True
+
+        logger.error(f"Turnstile not solved after {self.CHALLENGE_TIMEOUT}s")
+        return False
+
+    # ------------------------------------------------------------------
+    # Data extraction
+    # ------------------------------------------------------------------
+
+    def _extract_jsonld_persons(self, html_content: str) -> List[Dict[str, Any]]:
+        """
+        Extract Person objects from JSON-LD script tags.
+
+        FPS embeds JSON-LD blocks in <script type="application/ld+json"> tags.
+        The Person block is a list of Person objects with:
+          - name, additionalName (aliases)
+          - HomeLocation (addresses with street/city/state/zip/geo)
+          - telephone (phone numbers)
+          - relatedTo (relatives)
+        """
+        jsonld_blocks = re.findall(
+            r'<script\s+type="application/ld\+json">(.*?)</script>',
+            html_content, re.DOTALL
+        )
+
+        persons = []
+        for block_str in jsonld_blocks:
+            try:
+                data = json.loads(block_str)
+            except json.JSONDecodeError:
+                continue
+
+            # Could be a single object or a list
+            items = data if isinstance(data, list) else [data]
+
+            for item in items:
+                if item.get("@type") == "Person":
+                    persons.append(item)
+
+        return persons
+
+    def _extract_gresults(self, html_content: str) -> List[Dict[str, Any]]:
+        """
+        Extract gResults from the wam.init() call.
+
+        gResults is HTML-encoded JSON inside a JS string property:
+            gResults:'[{&quot;firstname&quot;:...}]'
+
+        Contains age, dob_month, tahoeId (for matching to JSON-LD persons),
+        and basic name/location fields.
+        """
+        # Match the gResults property value (HTML-encoded JSON string)
+        match = re.search(
+            r"gResults:'(\[.*?\])'",
+            html_content, re.DOTALL
+        )
+        if not match:
+            return []
+
+        encoded = match.group(1)
+        decoded = html.unescape(encoded)
+
+        try:
+            return json.loads(decoded)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse gResults JSON")
+            return []
+
+    def _merge_person_data(
+        self,
+        jsonld_persons: List[Dict[str, Any]],
+        gresults: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge JSON-LD Person data with gResults to get age/DOB.
+
+        Matching is done via tahoeId — gResults has tahoeId, JSON-LD has
+        it embedded in the @id URL (e.g. /john-smith_id_G3008487962272741523).
+        """
+        # Build a lookup from tahoeId -> gResults entry
+        gr_by_id = {}
+        for gr in gresults:
+            tid = gr.get("tahoeId", "")
+            if tid:
+                gr_by_id[tid] = gr
+
+        results = []
+        for person in jsonld_persons:
+            normalized = self._normalize_person(person)
+
+            # Try to find matching gResults entry
+            person_id = person.get("@id", "")
+            # Extract tahoeId from URL like: /john-smith_id_G3008487962272741523
+            id_match = re.search(r'_id_(\S+)$', person_id)
+            if id_match:
+                tahoe_id = id_match.group(1)
+                gr = gr_by_id.get(tahoe_id, {})
+                if gr:
+                    normalized["age"] = gr.get("age")
+                    normalized["dob_month"] = gr.get("dob_month")
+
+            results.append(normalized)
+
+        return results
+
+    def _normalize_person(self, person: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert a JSON-LD Person into our standard profile format.
+
+        Input (JSON-LD):
+            name, HomeLocation[].address.{street,city,state,zip},
+            telephone[], additionalName[], relatedTo[].name
+
+        Output (our format):
+            name, addresses[].{street,city,state,zip},
+            phone_numbers[], aliases[], relatives[], age, dob_month
+        """
+        result = {
+            "name": person.get("name"),
+            "profile_url": person.get("url"),
+            "addresses": [],
+            "phone_numbers": [],
+            "aliases": [],
+            "relatives": [],
+            "age": None,
+            "dob_month": None,
+        }
+
+        # Addresses from HomeLocation
+        for loc in person.get("HomeLocation", []):
+            addr = loc.get("address", {})
+            result["addresses"].append({
+                "street": addr.get("streetAddress", ""),
+                "city": addr.get("addressLocality", ""),
+                "state": addr.get("addressRegion", ""),
+                "zip": addr.get("postalCode", ""),
+            })
+
+        # Phone numbers
+        result["phone_numbers"] = person.get("telephone", [])
+
+        # Aliases from additionalName
+        result["aliases"] = person.get("additionalName", [])
+
+        # Relatives from relatedTo
+        for rel in person.get("relatedTo", []):
+            if isinstance(rel, dict):
+                name = rel.get("name", "")
+                if name:
+                    result["relatives"].append(name)
+            elif isinstance(rel, str):
+                result["relatives"].append(rel)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
+    async def _rate_limit(self):
+        """Random delay between requests to avoid detection."""
+        if self._request_count > 0:
+            delay = random.uniform(self.REQUEST_DELAY_MIN, self.REQUEST_DELAY_MAX)
+            logger.debug(f"Rate limit: waiting {delay:.1f}s")
+            await asyncio.sleep(delay)
+        self._request_count += 1
 
     async def search(
         self,
@@ -43,242 +340,124 @@ class FastPeopleSearchScraper(BaseScraper):
         last_name: str,
         city: Optional[str] = None,
         state: Optional[str] = None,
-        age: Optional[int] = None
+        age: Optional[int] = None,
     ) -> ScraperResult:
-        """Perform search on FastPeopleSearch"""
+        """
+        Search FastPeopleSearch for a person.
 
-        try:
-            search_url = self._build_search_url(first_name, last_name, city, state)
-            logger.info(f"FastPeopleSearch: Searching at {search_url}")
-
-            # Navigate to search page
-            if not await self.safe_get(search_url):
-                return ScraperResult(
-                    source=self.source_name,
-                    success=False,
-                    error="Failed to load search page"
-                )
-
-            # Wait for page to load
-            await self.random_delay(2, 4)
-
-            # Check for Cloudflare or block page
-            page_title = self.driver.title.lower()
-            if "just a moment" in page_title or "blocked" in page_title:
-                logger.warning("FastPeopleSearch: Cloudflare protection detected")
-                # Wait longer and retry
-                await self.random_delay(5, 10)
-
-            # Check if we got a results page or a profile page
-            current_url = self.driver.current_url
-
-            # Parse results
-            data = self.parse_results()
-
-            if not data or (not data.get("results") and not data.get("profile")):
-                # Save debug info
-                try:
-                    self.driver.save_screenshot("fastpeoplesearch_debug.png")
-                    with open("fastpeoplesearch_page.html", "w", encoding="utf-8") as f:
-                        f.write(self.driver.page_source)
-                    logger.info("DEBUG: Saved screenshot and HTML for inspection")
-                except Exception as e:
-                    logger.warning(f"Could not save debug files: {e}")
-
-                return ScraperResult(
-                    source=self.source_name,
-                    success=True,
-                    data={"message": "No results found", "results": []}
-                )
-
-            return ScraperResult(
-                source=self.source_name,
-                success=True,
-                data=data
-            )
-
-        except Exception as e:
-            logger.error(f"FastPeopleSearch search failed: {e}", exc_info=True)
+        Requires an open browser session (call open() first, or use scrape()
+        for automatic session management).
+        """
+        if not self._page:
             return ScraperResult(
                 source=self.source_name,
                 success=False,
-                error=str(e)
+                error="Browser not open — call open() first",
             )
 
-    def parse_results(self) -> Dict[str, Any]:
-        """Parse search results from FastPeopleSearch"""
+        url = self._build_search_url(first_name, last_name, city, state)
+        logger.info(f"FastPeopleSearch: searching {url}")
 
-        results = []
+        last_error = None
 
-        try:
-            # Check if this is a search results page (multiple people)
-            # or a direct profile page (single person)
-
-            # Try to find result cards (search results page)
-            result_cards = self.find_elements_safe(
-                By.CSS_SELECTOR,
-                "div.card.card-block, div.people-list-item, div[data-link]"
-            )
-
-            if result_cards:
-                logger.info(f"Found {len(result_cards)} result cards")
-                for card in result_cards:
-                    try:
-                        result_data = self._parse_result_card(card)
-                        if result_data:
-                            results.append(result_data)
-                    except Exception as e:
-                        logger.warning(f"Error parsing result card: {e}")
-                        continue
-
-            # If no result cards, try parsing as a profile page
-            if not results:
-                profile_data = self._parse_profile_page()
-                if profile_data and profile_data.get("name"):
-                    return {
-                        "profile": profile_data,
-                        "results": [profile_data],
-                        "total_found": 1
-                    }
-
-            return {
-                "results": results,
-                "total_found": len(results)
-            }
-
-        except Exception as e:
-            logger.error(f"Error parsing results: {e}", exc_info=True)
-            return {"results": [], "total_found": 0}
-
-    def _parse_result_card(self, card) -> Optional[Dict[str, Any]]:
-        """Parse individual result card from search results"""
-
-        result = {
-            "name": None,
-            "age": None,
-            "location": None,
-            "addresses": [],
-            "phone_numbers": [],
-            "profile_url": None
-        }
-
-        try:
-            # Try to find name link
-            name_elem = card.find_element(By.CSS_SELECTOR, "a.link-to-details, h2 a, .name a")
-            if name_elem:
-                result["name"] = name_elem.text.strip()
-                result["profile_url"] = name_elem.get_attribute("href")
-
-            # Try to find age
-            age_elem = self._find_element_in_card(card, ".age, span:contains('Age')")
-            if age_elem:
-                age_text = age_elem.text.strip()
-                age_match = re.search(r'\d+', age_text)
-                if age_match:
-                    result["age"] = int(age_match.group())
-
-            # Try to find location
-            location_elem = self._find_element_in_card(card, ".location, .city-state, .address")
-            if location_elem:
-                result["location"] = location_elem.text.strip()
-
-            return result if result["name"] else None
-
-        except Exception as e:
-            logger.warning(f"Error parsing result card details: {e}")
-            return None
-
-    def _find_element_in_card(self, card, selector: str):
-        """Try multiple selectors to find an element"""
-        for sel in selector.split(", "):
+        for attempt in range(1, self.MAX_RETRIES + 1):
             try:
-                elem = card.find_element(By.CSS_SELECTOR, sel.strip())
-                if elem:
-                    return elem
-            except:
-                continue
-        return None
+                # Rate limit between requests
+                await self._rate_limit()
 
-    def _parse_profile_page(self) -> Optional[Dict[str, Any]]:
-        """Parse a direct profile page"""
+                # Navigate
+                response = await self._page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=self.PAGE_LOAD_TIMEOUT,
+                )
 
-        result = {
-            "name": None,
-            "age": None,
-            "location": None,
-            "addresses": [],
-            "phone_numbers": [],
-            "relatives": [],
-            "associates": []
-        }
+                if not response:
+                    last_error = "No response from page"
+                    logger.warning(f"Attempt {attempt}: {last_error}")
+                    continue
 
+                # Handle Cloudflare Turnstile
+                if not await self._solve_turnstile(self._page):
+                    last_error = "Failed to solve Cloudflare challenge"
+                    logger.warning(f"Attempt {attempt}: {last_error}")
+                    # Reload on retry — get a fresh challenge
+                    continue
+
+                # Small delay for page to settle after challenge
+                await self._page.wait_for_timeout(1500)
+
+                # Get page content
+                html_content = await self._page.content()
+
+                # Extract both data sources
+                jsonld_persons = self._extract_jsonld_persons(html_content)
+                gresults = self._extract_gresults(html_content)
+
+                if not jsonld_persons:
+                    # Could be a "no results" page — not an error
+                    logger.info("No Person data found in JSON-LD")
+                    return ScraperResult(
+                        source=self.source_name,
+                        success=True,
+                        data={"results": [], "total_found": 0},
+                    )
+
+                # Merge JSON-LD with gResults for age/DOB
+                results = self._merge_person_data(jsonld_persons, gresults)
+
+                logger.info(
+                    f"FastPeopleSearch: {len(results)} results "
+                    f"({len(gresults)} with age data)"
+                )
+                return ScraperResult(
+                    source=self.source_name,
+                    success=True,
+                    data={
+                        "results": results,
+                        "total_found": len(results),
+                    },
+                )
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"Attempt {attempt}/{self.MAX_RETRIES} failed: {e}",
+                    exc_info=(attempt == self.MAX_RETRIES),
+                )
+
+        # All retries exhausted
+        return ScraperResult(
+            source=self.source_name,
+            success=False,
+            error=f"Failed after {self.MAX_RETRIES} attempts: {last_error}",
+        )
+
+    async def scrape(
+        self,
+        first_name: str,
+        last_name: str,
+        city: Optional[str] = None,
+        state: Optional[str] = None,
+        age: Optional[int] = None,
+    ) -> ScraperResult:
+        """
+        One-shot search with automatic session management.
+
+        Opens a browser, does the search, closes the browser.
+        For multiple lookups, use open()/search()/close() instead.
+        """
         try:
-            # Parse header - format: "Name in City, State"
-            header = self.find_element_safe(By.ID, "details-header")
-            if header:
-                header_text = header.text.strip()
-                if " in " in header_text:
-                    name_part, location_part = header_text.split(" in ", 1)
-                    result["name"] = name_part.strip()
-                    result["location"] = location_part.strip()
-                else:
-                    result["name"] = header_text
+            await self.open()
+            return await self.search(
+                first_name=first_name,
+                last_name=last_name,
+                city=city,
+                state=state,
+                age=age,
+            )
+        finally:
+            await self.close()
 
-            # Parse age - format: "Age 47"
-            age_header = self.find_element_safe(By.ID, "age-header")
-            if age_header:
-                age_text = age_header.text.strip()
-                age_match = re.search(r'\d+', age_text)
-                if age_match:
-                    result["age"] = int(age_match.group())
-
-            # Parse current address
-            current_address_section = self.find_element_safe(By.ID, "current_address_section")
-            if current_address_section:
-                address_links = current_address_section.find_elements(By.TAG_NAME, "a")
-                for link in address_links:
-                    addr = link.text.strip()
-                    if addr and addr not in result["addresses"]:
-                        result["addresses"].append(addr)
-
-            # Parse previous addresses
-            prev_address_section = self.find_element_safe(By.ID, "past_address_section")
-            if prev_address_section:
-                address_links = prev_address_section.find_elements(By.TAG_NAME, "a")
-                for link in address_links:
-                    addr = link.text.strip()
-                    if addr and addr not in result["addresses"]:
-                        result["addresses"].append(addr)
-
-            # Parse phone numbers
-            phone_section = self.find_element_safe(By.ID, "phone_number_section")
-            if phone_section:
-                phone_links = phone_section.find_elements(By.TAG_NAME, "a")
-                for link in phone_links:
-                    phone = link.text.strip()
-                    if phone and re.search(r'\d{3}', phone):
-                        result["phone_numbers"].append(phone)
-
-            # Parse relatives
-            relatives_section = self.find_element_safe(By.ID, "relatives_section")
-            if relatives_section:
-                relative_links = relatives_section.find_elements(By.CSS_SELECTOR, "a[href*='/name/']")
-                for link in relative_links:
-                    name = link.text.strip()
-                    if name:
-                        result["relatives"].append(name)
-
-            # Parse associates
-            associates_section = self.find_element_safe(By.ID, "associates_section")
-            if associates_section:
-                associate_links = associates_section.find_elements(By.CSS_SELECTOR, "a[href*='/name/']")
-                for link in associate_links:
-                    name = link.text.strip()
-                    if name:
-                        result["associates"].append(name)
-
-            return result if result["name"] else None
-
-        except Exception as e:
-            logger.error(f"Error parsing profile page: {e}", exc_info=True)
-            return None
+    def __repr__(self) -> str:
+        return f"<FastPeopleSearchScraper(source={self.source_name})>"

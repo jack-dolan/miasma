@@ -18,6 +18,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from app.scrapers.result import ScraperResult  # noqa: F401 — re-export for backward compat
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -39,33 +41,6 @@ try:
     logger.info("seleniumbase available - UC Mode enabled")
 except ImportError:
     HAS_SELENIUMBASE = False
-
-
-class ScraperResult:
-    """Standardized result format for all scrapers"""
-
-    def __init__(
-        self,
-        source: str,
-        success: bool,
-        data: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
-        timestamp: Optional[datetime] = None
-    ):
-        self.source = source
-        self.success = success
-        self.data = data or {}
-        self.error = error
-        self.timestamp = timestamp or datetime.utcnow()
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "source": self.source,
-            "success": self.success,
-            "data": self.data,
-            "error": self.error,
-            "timestamp": self.timestamp.isoformat()
-        }
 
 
 class BaseScraper(ABC):

@@ -30,6 +30,7 @@ aiohttp>=3.9.1
 requests>=2.31.0
 selenium>=4.16.0
 beautifulsoup4>=4.12.2
+camoufox>=0.4.0
 # Remove lxml for now - use html.parser instead
 # Optional: stealth scraping for cloudflare-protected sites
 # seleniumbase>=4.25.0
