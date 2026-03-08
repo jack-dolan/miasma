@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Shield, Eye, Database, Zap, Lock, Users } from 'lucide-react'
+import { Shield, Eye, Database, Zap, Lock } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -101,7 +101,7 @@ export default function HomePage() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-2 text-red-400">What We Don't Do</h4>
+              <h4 className="font-semibold mb-2 text-red-400">What We Don&apos;t Do</h4>
               <ul className="text-gray-300 space-y-1 text-sm">
                 <li>• Target government databases</li>
                 <li>• Interfere with official records</li>

@@ -19,6 +19,7 @@ class SubmissionStatus(str, enum.Enum):
     CONFIRMED = "confirmed"
     FAILED = "failed"
     SKIPPED = "skipped"
+    REMOVED = "removed"
 
 
 class Submission(Base):

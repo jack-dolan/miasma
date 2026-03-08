@@ -107,6 +107,7 @@ export const campaignApi = {
     const response = await api.post('/campaigns/', {
       name: data.name,
       description: data.description || null,
+      campaign_type: data.campaignType || 'poisoning',
       target_first_name: data.targetFirstName,
       target_last_name: data.targetLastName,
       target_city: data.targetCity || null,
@@ -130,6 +131,11 @@ export const campaignApi = {
 
   execute: async (id) => {
     const response = await api.post(`/campaigns/${id}/execute`)
+    return response.data
+  },
+
+  scan: async (id) => {
+    const response = await api.post(`/campaigns/${id}/scan`)
     return response.data
   },
 

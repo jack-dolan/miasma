@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { Shield, Eye, Database, BarChart3 } from 'lucide-react'
+import { useState } from 'react'
 
 // Import pages (we'll create these as placeholders)
 import HomePage from './pages/HomePage'

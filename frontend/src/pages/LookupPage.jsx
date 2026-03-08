@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, Loader2, AlertCircle, CheckCircle2, History, ExternalLink, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { lookupApi } from '../services/api'
 
@@ -27,9 +27,9 @@ export default function LookupPage() {
     if (activeTab === 'history') {
       loadHistory()
     }
-  }, [activeTab, historyPage])
+  }, [activeTab, loadHistory])
 
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
     try {
       const data = await lookupApi.getResults({ page: historyPage, pageSize: 10 })
@@ -40,7 +40,7 @@ export default function LookupPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }
+  }, [historyPage])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

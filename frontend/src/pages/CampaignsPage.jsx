@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Zap, Plus, Trash2, Play, Pause, RotateCcw, X, ChevronDown, ChevronUp, Filter, Eye, Users, AlertCircle, Loader2, Shield, Activity, Clock, TrendingDown, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { Zap, Plus, Trash2, Play, Pause, RotateCcw, X, ChevronDown, ChevronUp, Filter, Eye, Users, AlertCircle, Loader2, Shield, Activity, Clock, TrendingDown, TrendingUp, CheckCircle2, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { campaignApi, generateApi } from '../services/api'
 
@@ -16,6 +16,7 @@ const SUBMISSION_STATUS_COLORS = {
   pending: 'bg-gray-600/30 text-gray-300',
   submitted: 'bg-blue-600/30 text-blue-300',
   confirmed: 'bg-green-600/30 text-green-300',
+  removed: 'bg-emerald-600/30 text-emerald-300',
   failed: 'bg-red-600/30 text-red-300',
   skipped: 'bg-yellow-600/30 text-yellow-300',
 }
@@ -28,7 +29,7 @@ const US_STATES = [
   'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
 ]
 
-const TARGET_SITES = [
+const POISONING_TARGET_SITES = [
   { key: 'aboutme', label: 'About.me' },
   { key: 'gravatar', label: 'Gravatar' },
   { key: 'linktree', label: 'Linktree' },
@@ -37,7 +38,15 @@ const TARGET_SITES = [
   { key: 'manual', label: 'Manual Instructions' },
 ]
 
+const OPTOUT_BROKER_SITES = [
+  { key: 'fastpeoplesearch', label: 'FastPeopleSearch' },
+  { key: 'radaris', label: 'Radaris (planned)' },
+  { key: 'thatsthem', label: 'ThatsThem (planned)' },
+  { key: 'nuwber', label: 'Nuwber (planned)' },
+]
+
 function CreateModal({ onClose, onCreated }) {
+  const [campaignType, setCampaignType] = useState('optout')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [targetCount, setTargetCount] = useState(10)
@@ -48,6 +57,7 @@ function CreateModal({ onClose, onCreated }) {
   const [targetAge, setTargetAge] = useState('')
   const [selectedSites, setSelectedSites] = useState([])
   const [saving, setSaving] = useState(false)
+  const availableSites = campaignType === 'optout' ? OPTOUT_BROKER_SITES : POISONING_TARGET_SITES
 
   const toggleSite = (key) => {
     setSelectedSites((prev) =>
@@ -64,6 +74,7 @@ function CreateModal({ onClose, onCreated }) {
       await campaignApi.create({
         name,
         description,
+        campaignType,
         targetCount,
         targetFirstName: targetFirstName.trim(),
         targetLastName: targetLastName.trim(),
@@ -93,6 +104,38 @@ function CreateModal({ onClose, onCreated }) {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Campaign info */}
           <div className="space-y-3">
+            <div>
+              <label className="label">Campaign Type</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCampaignType('optout')}
+                  className={`rounded border px-3 py-2 text-sm text-left ${
+                    campaignType === 'optout'
+                      ? 'border-blue-500 bg-blue-900/20 text-blue-300'
+                      : 'border-gray-700 text-gray-300 hover:border-gray-600'
+                  }`}
+                >
+                  Opt-Out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCampaignType('poisoning')}
+                  className={`rounded border px-3 py-2 text-sm text-left ${
+                    campaignType === 'poisoning'
+                      ? 'border-blue-500 bg-blue-900/20 text-blue-300'
+                      : 'border-gray-700 text-gray-300 hover:border-gray-600'
+                  }`}
+                >
+                  Poisoning
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {campaignType === 'optout'
+                  ? 'Opt-out scans broker records and submits removal requests.'
+                  : 'Poisoning generates synthetic profiles and submits upstream data.'}
+              </p>
+            </div>
             <div>
               <label className="label">Campaign Name</label>
               <input
@@ -196,9 +239,11 @@ function CreateModal({ onClose, onCreated }) {
 
           {/* Target sites */}
           <div>
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Target Sites</h3>
+            <h3 className="text-sm font-medium text-gray-300 mb-3">
+              {campaignType === 'optout' ? 'Broker Sites' : 'Target Sites'}
+            </h3>
             <div className="grid grid-cols-2 gap-2">
-              {TARGET_SITES.map((site) => (
+              {availableSites.map((site) => (
                 <label
                   key={site.key}
                   className={`flex items-center space-x-2 p-2 rounded border cursor-pointer transition-colors ${
@@ -218,7 +263,7 @@ function CreateModal({ onClose, onCreated }) {
               ))}
             </div>
             {selectedSites.length === 0 && (
-              <p className="text-xs text-gray-500 mt-1">Leave empty to target all available sites</p>
+              <p className="text-xs text-gray-500 mt-1">Leave empty to target all available sources</p>
             )}
           </div>
 
@@ -333,6 +378,7 @@ function SubmissionsPanel({ campaignId, isRunning }) {
             <option value="pending">Pending</option>
             <option value="submitted">Submitted</option>
             <option value="confirmed">Confirmed</option>
+            <option value="removed">Removed</option>
             <option value="failed">Failed</option>
             <option value="skipped">Skipped</option>
           </select>
@@ -828,6 +874,8 @@ function CampaignCard({ campaign, onRefresh }) {
   const [expanded, setExpanded] = useState(false)
   const [showAccuracy, setShowAccuracy] = useState(false)
   const [acting, setActing] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scanData, setScanData] = useState(campaign.last_scan_result || null)
   const pollRef = useRef(null)
   const [live, setLive] = useState(campaign)
 
@@ -859,6 +907,7 @@ function CampaignCard({ campaign, onRefresh }) {
   // sync from parent
   useEffect(() => {
     setLive(campaign)
+    setScanData(campaign.last_scan_result || null)
   }, [campaign])
 
   const handleExecute = async () => {
@@ -930,7 +979,27 @@ function CampaignCard({ campaign, onRefresh }) {
     }
   }
 
+  const handleScan = async () => {
+    setScanning(true)
+    try {
+      const data = await campaignApi.scan(live.id)
+      setScanData(data)
+      setExpanded(true)
+      const count = Array.isArray(data.candidates) ? data.candidates.length : 0
+      toast.success(`Scan complete: ${count} candidate ${count === 1 ? 'site' : 'sites'} found`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Scan failed')
+    } finally {
+      setScanning(false)
+    }
+  }
+
   const isRunning = live.status === 'running'
+  const isOptout = live.campaign_type === 'optout'
+  const siteDirectory = isOptout ? OPTOUT_BROKER_SITES : POISONING_TARGET_SITES
+  const progressTotal = isOptout
+    ? Math.max((live.target_sites?.length || 0), 1)
+    : (live.target_count || 1) * (live.target_sites?.length || 1)
 
   // Build target identity string
   const targetParts = []
@@ -960,6 +1029,11 @@ function CampaignCard({ campaign, onRefresh }) {
                   <span className="inline-block w-1.5 h-1.5 bg-green-400 rounded-full ml-1.5 animate-pulse" />
                 )}
               </span>
+              <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
+                isOptout ? 'bg-cyan-600/30 text-cyan-300' : 'bg-purple-600/30 text-purple-300'
+              }`}>
+                {isOptout ? 'opt-out' : 'poisoning'}
+              </span>
             </div>
 
             {/* Target identity */}
@@ -982,7 +1056,7 @@ function CampaignCard({ campaign, onRefresh }) {
             {live.target_sites?.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {live.target_sites.map((site) => {
-                  const info = TARGET_SITES.find((s) => s.key === site)
+                  const info = siteDirectory.find((s) => s.key === site)
                   return (
                     <span
                       key={site}
@@ -1000,9 +1074,63 @@ function CampaignCard({ campaign, onRefresh }) {
               <ProgressBar
                 completed={live.submissions_completed || 0}
                 failed={live.submissions_failed || 0}
-                total={(live.target_count || 1) * (live.target_sites?.length || 1)}
+                total={progressTotal}
               />
             </div>
+
+            {isOptout && scanData && (
+              <div className="mt-3 rounded-lg border border-cyan-900/50 bg-cyan-900/10 p-3">
+                <p className="text-sm text-cyan-300">
+                  Scan: {scanData.sources_successful}/{scanData.sources_searched} sources successful, {scanData.total_records_found} records found.
+                </p>
+                {scanData.candidates?.length > 0 ? (
+                  <div className="mt-2 space-y-2">
+                    {scanData.candidates.map((candidate) => {
+                      const previewRecords = Array.isArray(candidate.preview_records) && candidate.preview_records.length > 0
+                        ? candidate.preview_records
+                        : [candidate.sample_record || {}]
+                      return (
+                        <div key={candidate.site} className="rounded border border-gray-700 bg-gray-900/70 p-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-cyan-200">
+                              {candidate.site}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {candidate.records_found} result{candidate.records_found === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <div className="mt-1 space-y-1">
+                            {previewRecords.map((record, idx) => {
+                              const name = record.name || 'Unknown name'
+                              const location = record.location || [record.city, record.state].filter(Boolean).join(', ') || null
+                              return (
+                                <div key={`${candidate.site}-${idx}`} className="rounded bg-gray-800/70 px-2 py-1.5">
+                                  <p className="text-sm text-gray-200">{name}</p>
+                                  {(location || record.age) && (
+                                    <p className="text-xs text-gray-400">
+                                      {[location, record.age ? `age ${record.age}` : null].filter(Boolean).join(' · ')}
+                                    </p>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {candidate.records_found > previewRecords.length && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Showing {previewRecords.length} of {candidate.records_found} records
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-cyan-200">
+                    No actionable candidate records were found in this scan.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-1 ml-4 shrink-0">
@@ -1014,6 +1142,16 @@ function CampaignCard({ campaign, onRefresh }) {
                 title="Start campaign"
               >
                 <Play className="h-4 w-4" />
+              </button>
+            )}
+            {isOptout && live.status !== 'running' && (
+              <button
+                onClick={handleScan}
+                disabled={acting || scanning}
+                className="p-2 text-cyan-400 hover:bg-cyan-900/30 rounded disabled:opacity-50"
+                title="Scan for records"
+              >
+                {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </button>
             )}
             {live.status === 'running' && (
@@ -1166,9 +1304,9 @@ export default function CampaignsPage() {
           {campaigns.length === 0 ? (
             <div className="card p-8 text-center">
               <Zap className="h-16 w-16 text-primary-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Data Poisoning Campaigns</h2>
+              <h2 className="text-xl font-semibold mb-2">Privacy Campaigns</h2>
               <p className="text-gray-400 mb-6">
-                Create and manage strategic data injection campaigns to protect your privacy.
+                Create opt-out or poisoning campaigns to reduce broker exposure.
               </p>
               <button className="btn-primary" onClick={() => setShowCreate(true)}>
                 Create First Campaign

@@ -23,6 +23,12 @@ class CampaignStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class CampaignType(str, enum.Enum):
+    """Type of campaign strategy"""
+    OPTOUT = "optout"
+    POISONING = "poisoning"
+
+
 class Campaign(Base):
     """Campaign for submitting fake data to data broker sites"""
 
@@ -49,6 +55,16 @@ class Campaign(Base):
         default=CampaignStatus.DRAFT,
         nullable=False
     )
+    campaign_type: Mapped[CampaignType] = mapped_column(
+        Enum(
+            CampaignType,
+            values_callable=lambda e: [x.value for x in e],
+            native_enum=False,
+        ),
+        default=CampaignType.POISONING,
+        server_default="poisoning",
+        nullable=False,
+    )
 
     # Target identity (the real person whose records we're poisoning)
     target_first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -69,6 +85,8 @@ class Campaign(Base):
     submissions_failed: Mapped[int] = mapped_column(Integer, default=0)
     last_execution: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     next_execution: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scan_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scan_result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

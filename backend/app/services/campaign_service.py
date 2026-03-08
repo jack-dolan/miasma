@@ -8,7 +8,7 @@ from typing import Dict, Optional, Any, List
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.campaign import Campaign, CampaignStatus
+from app.models.campaign import Campaign, CampaignStatus, CampaignType
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ class CampaignService:
     """Service for campaign CRUD and execution"""
 
     VALID_STATUSES = {s.value for s in CampaignStatus}
+    VALID_TYPES = {t.value for t in CampaignType}
     ALLOWED_TRANSITIONS = {
         "draft": {"scheduled", "running"},
         "scheduled": {"running", "paused", "draft"},
@@ -41,6 +42,7 @@ class CampaignService:
         target_age: Optional[int] = None,
         target_sites: Optional[List[str]] = None,
         target_count: int = 10,
+        campaign_type: Optional[str] = None,
     ) -> Campaign:
         """Create a new campaign"""
 
@@ -51,6 +53,10 @@ class CampaignService:
 
         if current_count >= settings.MAX_CAMPAIGNS_PER_USER:
             raise ValueError(f"Campaign limit reached ({settings.MAX_CAMPAIGNS_PER_USER})")
+
+        resolved_type = campaign_type or CampaignType.POISONING.value
+        if resolved_type not in cls.VALID_TYPES:
+            raise ValueError(f"Invalid campaign_type: {resolved_type}")
 
         campaign = Campaign(
             user_id=user_id,
@@ -64,6 +70,7 @@ class CampaignService:
             target_sites=target_sites,
             target_count=min(target_count, settings.MAX_SUBMISSIONS_PER_CAMPAIGN),
             status=CampaignStatus.DRAFT,
+            campaign_type=resolved_type,
         )
 
         db.add(campaign)
@@ -154,6 +161,12 @@ class CampaignService:
             campaign.status = new_status
 
         # Update other fields
+        if "campaign_type" in updates and updates["campaign_type"] is not None:
+            new_type = updates["campaign_type"]
+            if new_type not in cls.VALID_TYPES:
+                raise ValueError(f"Invalid campaign_type: {new_type}")
+            campaign.campaign_type = new_type
+
         updatable = (
             "name", "description", "target_sites", "target_count",
             "target_first_name", "target_last_name", "target_city",

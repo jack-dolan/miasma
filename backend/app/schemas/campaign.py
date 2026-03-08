@@ -3,7 +3,7 @@ Pydantic schemas for campaign API operations
 """
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal, Dict, Any
 
 from pydantic import BaseModel
 
@@ -19,6 +19,7 @@ class CampaignCreate(BaseModel):
     target_age: Optional[int] = None
     target_sites: Optional[List[str]] = None
     target_count: int = 10
+    campaign_type: Literal["optout", "poisoning"] = "poisoning"
 
 
 class CampaignUpdate(BaseModel):
@@ -33,6 +34,7 @@ class CampaignUpdate(BaseModel):
     target_sites: Optional[List[str]] = None
     target_count: Optional[int] = None
     status: Optional[str] = None
+    campaign_type: Optional[Literal["optout", "poisoning"]] = None
 
 
 class CampaignResponse(BaseModel):
@@ -42,6 +44,7 @@ class CampaignResponse(BaseModel):
     name: str
     description: Optional[str] = None
     status: str
+    campaign_type: str
     target_first_name: Optional[str] = None
     target_last_name: Optional[str] = None
     target_city: Optional[str] = None
@@ -53,6 +56,8 @@ class CampaignResponse(BaseModel):
     submissions_failed: int
     last_execution: Optional[datetime] = None
     next_execution: Optional[datetime] = None
+    last_scan_at: Optional[datetime] = None
+    last_scan_result: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 

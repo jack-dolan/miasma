@@ -2,6 +2,7 @@
 Campaign routes for managing data poisoning campaigns
 """
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,6 +16,7 @@ from app.services.campaign_executor import CampaignExecutor
 from app.services.lookup_service import LookupService
 from app.services.accuracy_service import AccuracyService
 from app.core.database import AsyncSessionLocal
+from app.models.campaign import CampaignType
 from app.models.submission import Submission, SubmissionStatus
 from app.models.campaign_baseline import CampaignBaseline
 from app.schemas.campaign import (
@@ -41,6 +43,7 @@ def _campaign_response(c) -> CampaignResponse:
         name=c.name,
         description=c.description,
         status=c.status.value if hasattr(c.status, 'value') else c.status,
+        campaign_type=c.campaign_type.value if hasattr(c.campaign_type, "value") else c.campaign_type,
         target_first_name=c.target_first_name,
         target_last_name=c.target_last_name,
         target_city=c.target_city,
@@ -52,9 +55,50 @@ def _campaign_response(c) -> CampaignResponse:
         submissions_failed=c.submissions_failed,
         last_execution=c.last_execution,
         next_execution=c.next_execution,
+        last_scan_at=c.last_scan_at,
+        last_scan_result=c.last_scan_result,
         created_at=c.created_at,
         updated_at=c.updated_at,
     )
+
+
+def _extract_scan_candidates(search_results: dict) -> list[dict]:
+    """Normalize lookup output into opt-out scan candidates."""
+    def _normalize_preview_record(record: dict) -> dict:
+        addresses = record.get("addresses") or []
+        primary_address = addresses[0] if addresses else {}
+        city = primary_address.get("city") or record.get("city")
+        state = primary_address.get("state") or record.get("state")
+        return {
+            "name": record.get("name"),
+            "age": record.get("age"),
+            "city": city,
+            "state": state,
+            "profile_url": record.get("profile_url"),
+        }
+
+    candidates = []
+    for result in search_results.get("results", []):
+        if not result.get("success"):
+            continue
+        records = result.get("data", {}).get("results", [])
+        if not records:
+            continue
+        source = result.get("source")
+        if not source:
+            continue
+        candidates.append(
+            {
+                "site": source,
+                "records_found": len(records),
+                "sample_record": records[0],
+                "preview_records": [
+                    _normalize_preview_record(record)
+                    for record in records[:5]
+                ],
+            }
+        )
+    return candidates
 
 
 @router.get("/", response_model=CampaignList)
@@ -103,6 +147,7 @@ async def create_campaign(
             target_age=data.target_age,
             target_sites=data.target_sites,
             target_count=data.target_count,
+            campaign_type=data.campaign_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -184,6 +229,58 @@ async def execute_campaign(
     await CampaignExecutor.start_campaign(campaign_id, AsyncSessionLocal)
 
     return {"message": "Campaign execution started", "campaign_id": campaign_id}
+
+
+@router.post("/{campaign_id}/scan")
+async def scan_campaign(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_required_user_id),
+):
+    """Scan broker sources for opt-out candidates for this campaign."""
+    campaign = await CampaignService.get_campaign(db, campaign_id, user_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign_type = (
+        campaign.campaign_type.value
+        if hasattr(campaign.campaign_type, "value")
+        else campaign.campaign_type
+    )
+    if campaign_type != CampaignType.OPTOUT.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Scan endpoint is only valid for optout campaigns",
+        )
+
+    if not campaign.target_first_name or not campaign.target_last_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Campaign must have target first and last name set",
+        )
+
+    search_results = await LookupService.search_person(
+        first_name=campaign.target_first_name,
+        last_name=campaign.target_last_name,
+        city=campaign.target_city,
+        state=campaign.target_state,
+        age=campaign.target_age,
+        sources=campaign.target_sites or None,
+    )
+    candidates = _extract_scan_candidates(search_results)
+
+    payload = {
+        "campaign_id": campaign_id,
+        "sources_searched": search_results.get("sources_searched", 0),
+        "sources_successful": search_results.get("sources_successful", 0),
+        "total_records_found": search_results.get("total_records_found", 0),
+        "candidates": candidates,
+    }
+    campaign.last_scan_at = datetime.now(timezone.utc)
+    campaign.last_scan_result = payload
+    await db.commit()
+
+    return payload
 
 
 @router.post("/{campaign_id}/pause")

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart3, Search, Zap, Database } from 'lucide-react'
+import { Search, Zap, Database } from 'lucide-react'
 import { analyticsApi } from '../services/api'
 
 export default function AnalyticsPage() {

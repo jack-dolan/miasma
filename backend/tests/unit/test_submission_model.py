@@ -47,10 +47,11 @@ class TestSubmissionStatus:
         assert SubmissionStatus.CONFIRMED == "confirmed"
         assert SubmissionStatus.FAILED == "failed"
         assert SubmissionStatus.SKIPPED == "skipped"
+        assert SubmissionStatus.REMOVED == "removed"
 
     def test_all_values(self):
         values = [s.value for s in SubmissionStatus]
-        assert set(values) == {"pending", "submitted", "confirmed", "failed", "skipped"}
+        assert set(values) == {"pending", "submitted", "confirmed", "failed", "skipped", "removed"}
 
 
 class TestSubmissionModel:

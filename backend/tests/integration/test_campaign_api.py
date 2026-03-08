@@ -3,6 +3,7 @@ Integration tests for campaign endpoints
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
 
 
@@ -60,9 +61,29 @@ class TestCampaignCreate:
         data = response.json()
         assert data["name"] == "Test Campaign"
         assert data["status"] == "draft"
+        assert data["campaign_type"] == "poisoning"
         assert data["target_count"] == 5
         assert data["target_first_name"] == "Joe"
         assert data["target_last_name"] == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_create_campaign_with_optout_type(self, client: AsyncClient):
+        """Should accept explicit campaign_type"""
+        token = await get_auth_token(client)
+        response = await client.post(
+            "/api/v1/campaigns/",
+            headers=auth_headers(token),
+            json={
+                "name": "Optout Campaign",
+                "target_first_name": "Jane",
+                "target_last_name": "Doe",
+                "campaign_type": "optout",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["campaign_type"] == "optout"
 
     @pytest.mark.asyncio
     async def test_create_campaign_with_full_target(self, client: AsyncClient):
@@ -159,11 +180,12 @@ class TestCampaignCRUD:
         response = await client.patch(
             f"/api/v1/campaigns/{campaign_id}",
             headers=auth_headers(token),
-            json={"name": "Updated Name"},
+            json={"name": "Updated Name", "campaign_type": "optout"},
         )
 
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Name"
+        assert response.json()["campaign_type"] == "optout"
 
     @pytest.mark.asyncio
     async def test_delete_campaign(self, client: AsyncClient):
@@ -241,3 +263,88 @@ class TestCampaignCRUD:
             headers=auth_headers(token),
         )
         assert response.status_code == 404
+
+
+class TestCampaignScan:
+    """Tests for POST /api/v1/campaigns/{id}/scan"""
+
+    @pytest.mark.asyncio
+    async def test_scan_optout_campaign(self, client: AsyncClient):
+        token = await get_auth_token(client)
+        create_resp = await client.post(
+            "/api/v1/campaigns/",
+            headers=auth_headers(token),
+            json={
+                "name": "Scan Campaign",
+                "target_first_name": "Jane",
+                "target_last_name": "Doe",
+                "target_city": "Austin",
+                "target_state": "TX",
+                "campaign_type": "optout",
+                "target_sites": ["fastpeoplesearch"],
+            },
+        )
+        campaign_id = create_resp.json()["id"]
+
+        mock_scan = {
+            "sources_searched": 1,
+            "sources_successful": 1,
+            "total_records_found": 2,
+            "results": [
+                {
+                    "source": "fastpeoplesearch",
+                    "success": True,
+                    "data": {"results": [{"name": "Jane Doe", "location": "Austin, TX"}]},
+                }
+            ],
+        }
+
+        with patch(
+            "app.api.routes.campaigns.LookupService.search_person",
+            new=AsyncMock(return_value=mock_scan),
+        ):
+            response = await client.post(
+                f"/api/v1/campaigns/{campaign_id}/scan",
+                headers=auth_headers(token),
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["campaign_id"] == campaign_id
+        assert data["sources_searched"] == 1
+        assert data["sources_successful"] == 1
+        assert data["total_records_found"] == 2
+        assert len(data["candidates"]) == 1
+        assert data["candidates"][0]["site"] == "fastpeoplesearch"
+        assert len(data["candidates"][0]["preview_records"]) == 1
+
+        campaign_resp = await client.get(
+            f"/api/v1/campaigns/{campaign_id}",
+            headers=auth_headers(token),
+        )
+        assert campaign_resp.status_code == 200
+        campaign_data = campaign_resp.json()
+        assert campaign_data["last_scan_at"] is not None
+        assert campaign_data["last_scan_result"] is not None
+        assert campaign_data["last_scan_result"]["total_records_found"] == 2
+
+    @pytest.mark.asyncio
+    async def test_scan_rejects_non_optout_campaign(self, client: AsyncClient):
+        token = await get_auth_token(client)
+        create_resp = await client.post(
+            "/api/v1/campaigns/",
+            headers=auth_headers(token),
+            json={
+                "name": "Poisoning Campaign",
+                "target_first_name": "Jane",
+                "target_last_name": "Doe",
+                "campaign_type": "poisoning",
+            },
+        )
+        campaign_id = create_resp.json()["id"]
+
+        response = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/scan",
+            headers=auth_headers(token),
+        )
+        assert response.status_code == 400
