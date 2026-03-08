@@ -1,115 +1,93 @@
-# Miasma - Personal Data Poisoning Service
+# Miasma
 
-A defensive data poisoning platform that helps individuals protect their privacy by strategically introducing misleading information into commercial data broker networks.
+Miasma is a personal privacy-defense project built around one idea: if data brokers will not reliably remove your data, degrade the value of what they keep.
 
-## Project Goals
+> Many brokers and aggregators offer opt-out forms, but those opt-outs are often partial, temporary, or operationally weak. If reliable deletion is unrealistic, the next-best defensive move is to poison the well: intentionally spread false profile signals so the commercial identity graph is less accurate and less useful.
 
-- **Privacy Protection**: Reduce the accuracy of personal data held by commercial data aggregators
-- **Learning Platform**: Modern full-stack development with industry-standard tools and practices - using this as a learning side-project
-- **Personal Use First**: Initially single-user (me), with potential for future expansion
+This repo is a working full-stack system for that strategy, and a hands-on engineering project for building production-style software end to end.
 
-## Tech Stack
+## Why This Exists
 
-### Frontend
-- **React 18** - Modern component-based UI
-- **Tailwind CSS** - Utility-first styling
-- **Vite** - Fast build tool and dev server
-- **React Query** - Server state management
+People-search and broker ecosystems continuously collect, buy, and re-aggregate personal data. Even when an opt-out path exists, records can reappear through refresh cycles and downstream vendors.
 
-### Backend
-- **Python 3.13** - Core language
-- **FastAPI** - High-performance async web framework
-- **PostgreSQL** - Primary database for campaigns and results
-- **Redis** - Caching and session management
-- **SQLAlchemy** - ORM with async support
+Miasma treats that as an adversarial data-quality problem:
+- remove what can be removed
+- measure what cannot
+- inject noise where removal fails
 
-### Data Collection & Processing
-- **Selenium** - Web automation and scraping
-- **BeautifulSoup4** - HTML parsing, plus the website art is pretty
-- **Requests** - HTTP client for APIs
-- **Pandas** - Data manipulation and analysis
+The goal is not perfect invisibility. The goal is to make your profile less precise, less stable, and less monetizable.
 
-### Infrastructure & DevOps
-- **Docker** - Containerization
-- **Docker Compose** - Local development environment
-- **AWS ECS** - Container orchestration
-- **AWS RDS** - Managed PostgreSQL
-- **AWS ElastiCache** - Managed Redis
-- **GitHub Actions** - CI/CD pipeline
-- **Snyk** - Security vulnerability scanning
+## What It Does Today
 
-## Architecture Overview
+The current MVP centers on opt-out execution for a single broker flow (`fastpeoplesearch`) with campaign tracking in both API and UI.
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React SPA     │────│   FastAPI       │────│   PostgreSQL    │
-│   (Frontend)    │    │   (Backend)     │    │   (Database)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                       ┌──────┴──────┐
-                       │    Redis    │
-                       │  (Caching)  │
-                       └─────────────┘
-```
+You can:
+1. Create an opt-out campaign for a target identity.
+2. Scan for candidate records.
+3. Execute removal attempts.
+4. Track campaign and per-submission outcomes (`removed`, `failed`, `skipped`, etc.).
 
-## Features (Planned)
+MVP scope, non-goals, and exit criteria are locked in [`docs/MVP.md`](docs/MVP.md).
 
-### Phase 1: Core Infrastructure
-- [ ] User authentication and profile management
-- [ ] Data source discovery and monitoring
-- [ ] Basic web scraping for personal data lookup
+## How It Works
 
-### Phase 2: Intelligence Gathering
-- [ ] Automated scanning of major data broker sites
-- [ ] Data source mapping and classification
-- [ ] Personal data inventory and tracking
+At runtime, the system combines a React frontend, a FastAPI backend, PostgreSQL for campaign/submission state, Redis for caching/session support, and Selenium-driven automation for broker interaction.
 
-### Phase 3: Data Injection
-- [ ] Fictitious data generation algorithms
-- [ ] Automated form submission system
-- [ ] Campaign management and tracking
+A typical campaign flow:
+1. The frontend creates a campaign via the API.
+2. The backend runs broker lookup/scan logic and stores candidate summaries.
+3. The campaign executor creates and processes submission records through site-specific handlers.
+4. Status and error details are persisted and surfaced in the Campaigns UI.
 
-### Phase 4: Verification & Analytics
-- [ ] Success rate monitoring
-- [ ] Data propagation tracking
-- [ ] Effectiveness analytics dashboard
+Around that core flow, the project also uses SQLAlchemy + Alembic for data modeling/migrations, BeautifulSoup/Requests/Pandas for scraping and data workflows, Docker Compose for local orchestration, and GitHub Actions plus security tooling (including Snyk) for CI and hygiene. Deployment docs target AWS-style infrastructure patterns (ECS/RDS/ElastiCache).
 
-## Privacy & Legal Considerations
-
-- **Scope Limitation**: Only targets commercial data brokers and voluntary submission sites
-- **Government Exclusion**: Explicitly avoids interaction with official government sources
-- **Personal Use**: Designed for individuals protecting their own data
-- **Compliance**: Respects terms of service and applicable laws
+Frontend delivery is built with React, Vite, Tailwind CSS, and React Query; backend services run on Python/FastAPI with SQLAlchemy; containerized runtime and local orchestration use Docker and Docker Compose.
 
 ## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/jack-dolan/miasma.git
 cd miasma
-
-# Start development environment
-docker-compose up -d
-
-# Frontend development
-cd frontend
-npm install
-npm run dev
-
-# Backend development
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
+docker compose up -d
 ```
 
-## Development Workflow
+Backend local run:
 
-1. **Feature Branch**: Create feature branches from `main`
-2. **Development**: Use Docker Compose for local development
-3. **Testing**: Automated testing with pytest and Jest
-4. **Security**: Snyk scanning in CI pipeline
-5. **Deployment**: Automated deployment to AWS via GitHub Actions
+```bash
+cd backend
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Frontend local run:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+## Demo + Validation
+
+Use the MVP script in [`docs/MVP.md`](docs/MVP.md) for an end-to-end demo.
+
+Core backend validation command:
+
+```bash
+docker compose exec -T backend pytest \
+  tests/test_campaign_executor_optout.py \
+  tests/test_campaign_executor.py \
+  tests/integration/test_campaign_api.py \
+  tests/unit/test_optout_fastpeoplesearch.py -q
+```
+
+## Repository Layout
+
+- `backend/`: FastAPI app, domain models, services, scrapers, tests
+- `frontend/`: React app, pages/components, API client, tests
+- `docs/`: API/deployment/security docs plus MVP definition
+- `infrastructure/`: Terraform and deployment scripts
 
 ## Disclaimer
 
-This tool is designed for legitimate privacy protection purposes. Users are responsible for ensuring their use complies with all applicable laws and terms of service.
+This project is for legitimate privacy-defense use. You are responsible for using it in ways that comply with applicable laws and platform terms.
