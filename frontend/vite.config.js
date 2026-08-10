@@ -30,10 +30,21 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          query: ['@tanstack/react-query'],
+        // Function form, not the object form. Vite 8 builds with rolldown,
+        // which accepts only a function here and fails the build outright with
+        // "TypeError: manualChunks is not a function". Rollup accepts both, so
+        // this form is correct before and after that upgrade.
+        //
+        // Order is load-bearing: the tests run longest-prefix first, because
+        // `node_modules/react-router-dom/` and `node_modules/react-dom/` both
+        // contain the string `react`, and a bare `react` test would swallow
+        // them into vendor and silently collapse three chunks into one.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/[\\/]node_modules[\\/]react-router-dom[\\/]/.test(id)) return 'router'
+          if (/[\\/]node_modules[\\/]@tanstack[\\/]react-query[\\/]/.test(id)) return 'query'
+          if (/[\\/]node_modules[\\/]react-dom[\\/]/.test(id)) return 'vendor'
+          if (/[\\/]node_modules[\\/]react[\\/]/.test(id)) return 'vendor'
         },
       },
     },
